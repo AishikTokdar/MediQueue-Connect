@@ -3,6 +3,7 @@ import os
 import sys
 import socket
 from pathlib import Path
+from crypto_utils import wrap_client_socket
 
 _ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = _ROOT / "data"
@@ -29,6 +30,7 @@ def tcp_send(payload: dict) -> dict | None:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(3.0)
         s.connect((HOST, PORT))
+        s = wrap_client_socket(s, server_hostname=HOST)
         s.sendall((json.dumps(payload) + "\n").encode())
         data = b""
         while True:

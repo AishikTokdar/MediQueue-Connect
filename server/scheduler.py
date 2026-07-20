@@ -172,3 +172,21 @@ class Scheduler:
     def get_specializations(self) -> list:
         specs = {info.get("specialization", "General") for info in self.doctors.values()}
         return sorted(specs)
+
+    def register_doctor(self, doctor: str, specialization: str, accepted_insurance: list, udp_port: int, slots: list = None) -> dict:
+        with self.lock:
+            if not slots:
+                slots = ["9AM", "11AM", "2PM", "4PM"]
+            self.doctors[doctor] = {
+                "udp_port": udp_port,
+                "slots": slots,
+                "accepted_insurance": accepted_insurance,
+                "specialization": specialization,
+            }
+            self.save_doctors()
+            return {"status": "OK", "doctor": doctor, "udp_port": udp_port}
+
+    def save_doctors(self) -> None:
+        with open(self._doctors_path, "w") as f:
+            json.dump(self.doctors, f, indent=4)
+

@@ -5,6 +5,7 @@ import os
 import sys
 import argparse
 from datetime import datetime
+from crypto_utils import wrap_client_socket
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -38,6 +39,7 @@ def fetch_dashboard() -> dict | None:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(3.0)
         s.connect((HOST, PORT))
+        s = wrap_client_socket(s, server_hostname=HOST)
         s.sendall((json.dumps({"command": "DASHBOARD"}) + "\n").encode())
         data = b""
         while True:

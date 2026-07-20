@@ -36,5 +36,65 @@
             "insuranceA",
             "insuranceB"
         ]
+    },
+    "test_user_1784573820": {
+        "password": "5f5b24ad65531525ddcccace0598dafaa386e30749babf12c7b0cda2af45c582",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_b_1784573820": {
+        "password": "7619753196205b3f29f2f816098589f252af13f6c7756f41224b211fcee9061a",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_1784573841": {
+        "password": "5f5b24ad65531525ddcccace0598dafaa386e30749babf12c7b0cda2af45c582",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_b_1784573841": {
+        "password": "7619753196205b3f29f2f816098589f252af13f6c7756f41224b211fcee9061a",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_1784574012": {
+        "password": "5f5b24ad65531525ddcccace0598dafaa386e30749babf12c7b0cda2af45c582",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_b_1784574012": {
+        "password": "7619753196205b3f29f2f816098589f252af13f6c7756f41224b211fcee9061a",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_1784574220": {
+        "password": "5f5b24ad65531525ddcccace0598dafaa386e30749babf12c7b0cda2af45c582",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_b_1784574220": {
+        "password": "7619753196205b3f29f2f816098589f252af13f6c7756f41224b211fcee9061a",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_1784574289": {
+        "password": "5f5b24ad65531525ddcccace0598dafaa386e30749babf12c7b0cda2af45c582",
+        "insurance": [
+            "insuranceA"
+        ]
+    },
+    "test_user_b_1784574289": {
+        "password": "7619753196205b3f29f2f816098589f252af13f6c7756f41224b211fcee9061a",
+        "insurance": [
+            "insuranceA"
+        ]
     }
 }

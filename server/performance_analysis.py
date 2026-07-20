@@ -8,6 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from crypto_utils import wrap_client_socket
 
 HOST = "127.0.0.1"
 SERVER_PORT = 4000
@@ -45,6 +46,7 @@ def measure_tcp(rounds: int) -> list[float]:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.connect((HOST, SERVER_PORT))
+        sock = wrap_client_socket(sock, server_hostname=HOST)
     except ConnectionRefusedError:
         print("[ERROR] Cannot connect to Health Server – make sure health_server.py is running.")
         return latencies
@@ -109,7 +111,7 @@ def stats(data: list[float]) -> dict:
 
 def bar(value: float, max_val: float, width: int = 30) -> str:
     filled = int(round(value / max_val * width)) if max_val else 0
-    return "█" * filled + "░" * (width - filled)
+    return "#" * filled + "-" * (width - filled)
 
 
 def print_table(tcp_lat: list[float], udp_lat: list[float]) -> None:
@@ -136,7 +138,7 @@ def print_summary(tcp_s: dict, udp_s: dict) -> None:
 
     winner = "UDP" if udp_s["mean"] < tcp_s["mean"] else "TCP"
     diff = abs(tcp_s["mean"] - udp_s["mean"])
-    print(f"\n  → {winner} is faster by {diff:.3f} ms on average.\n")
+    print(f"\n  -> {winner} is faster by {diff:.3f} ms on average.\n")
 
 
 def save_results(tcp_lat: list[float], udp_lat: list[float],

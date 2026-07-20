@@ -13,6 +13,7 @@ from auth import AuthManager
 from logger import log
 from queue_manager import QueueManager
 from chat_history import ChatHistory
+from crypto_utils import get_server_ssl_context
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -158,15 +159,20 @@ def handle_register(conn, request):
         send(conn, {"status": "FAIL", "reason": "Username already taken"})
 
 def handle_get_specializations(conn, request, token):
+    insurance = auth.get_insurance(token) if token else []
     all_docs = scheduler.get_all_doctors()
-    online_specs = {
-        info.get("specialization", "General")
-        for doc, info in all_docs.items()
-        if queue_mgr.is_online(doc)
-    }
-    all_specs = {info.get("specialization", "General") for info in all_docs.values()}
     
-    sorted_specs = sorted(list(all_specs), key=lambda s: (s not in online_specs, s))
+    matching_specs = set()
+    online_specs = set()
+    for doc, info in all_docs.items():
+        doc_ins = info.get("accepted_insurance", [])
+        if not insurance or any(i in doc_ins for i in insurance):
+            spec = info.get("specialization", "General Physician")
+            matching_specs.add(spec)
+            if queue_mgr.is_online(doc):
+                online_specs.add(spec)
+    
+    sorted_specs = sorted(list(matching_specs), key=lambda s: (s not in online_specs, s))
     send(conn, {"status": "OK", "specializations": sorted_specs})
 
 def handle_get_slots(conn, request, token):
@@ -183,7 +189,7 @@ def handle_book_slot(conn, request, token):
 
     if result["status"] == "BOOKED":
         _incr("total_bookings")
-        log(f"BOOKED: {user} → {doctor} @ {slot}")
+        log(f"BOOKED: {user} -> {doctor} @ {slot}")
 
     send(conn, result)
 
@@ -205,10 +211,17 @@ def handle_cancel_my_booking(conn, request, token):
 def handle_request_chat(conn, request, token):
     doctor = request.get("doctor", "")
     user = auth.get_user(token)
+    insurance = auth.get_insurance(token)
     doctors_data = scheduler.get_all_doctors()
 
     if doctor not in doctors_data:
         send(conn, {"status": "FAIL", "reason": "Doctor not found"})
+        return
+
+    doc_info = doctors_data[doctor]
+    doc_ins = doc_info.get("accepted_insurance", [])
+    if not any(i in doc_ins for i in insurance):
+        send(conn, {"status": "FAIL", "reason": "Insurance mismatch: this doctor does not accept your insurance policy."})
         return
 
     if not queue_mgr.is_online(doctor):
@@ -218,7 +231,7 @@ def handle_request_chat(conn, request, token):
     udp_port = doctors_data[doctor]["udp_port"]
 
     if queue_mgr.try_start_session(doctor, user):
-        log(f"REQUEST_CHAT: Granted immediately {user} → {doctor}")
+        log(f"REQUEST_CHAT: Granted immediately {user} -> {doctor}")
         send(conn, {
             "status": "READY",
             "udp_port": udp_port,
@@ -239,7 +252,7 @@ def handle_start_chat(conn, request, token):
     user = auth.get_user(token)
     chat_hist.start_session(session_id, doctor, user)
     _incr("total_chats")
-    log(f"START_CHAT: {user} ↔ {doctor}  [session={session_id}]")
+    log(f"START_CHAT: {user} <-> {doctor}  [session={session_id}]")
     send(conn, {"status": "CHAT_LOGGED", "session_id": session_id})
 
 def handle_log_message(conn, request, token):
@@ -256,7 +269,7 @@ def handle_terminate_chat(conn, request, token):
     session_id = request.get("session_id", "")
     user = auth.get_user(token)
     chat_hist.end_session(session_id, reason="CLIENT_TERMINATED")
-    log(f"TERMINATE_CHAT: {user} ↔ {doctor}  [session={session_id}]")
+    log(f"TERMINATE_CHAT: {user} <-> {doctor}  [session={session_id}]")
     send(conn, {"status": "CHAT_TERMINATED_LOGGED"})
 
 def handle_end_session(conn, request, token):
@@ -274,7 +287,7 @@ def handle_end_session(conn, request, token):
         next_user, next_conn = next_patient
         doctors_data = scheduler.get_all_doctors()
         udp_port = doctors_data[doctor]["udp_port"]
-        log(f"QUEUE: Notifying next patient {next_user} → {doctor}")
+        log(f"QUEUE: Notifying next patient {next_user} -> {doctor}")
         try:
             send(next_conn, {
                 "status": "TURN_READY",
@@ -340,15 +353,38 @@ def handle_doctor_offline(conn, request, token):
 
 def handle_get_doctors(conn, request, token):
     insurance = auth.get_insurance(token)
+    specialization = request.get("specialization")
     all_docs = scheduler.get_all_doctors()
     augmented_docs = {}
     for doc_name, doc_info in all_docs.items():
         if not any(i in doc_info.get("accepted_insurance", []) for i in insurance):
             continue
+        if specialization and specialization.lower() not in doc_info.get("specialization", "").lower():
+            continue
         info_copy = doc_info.copy()
         info_copy["online"] = queue_mgr.is_online(doc_name)
         augmented_docs[doc_name] = info_copy
     send(conn, {"status": "OK", "doctors": augmented_docs})
+
+def handle_register_doctor(conn, request):
+    doctor = request.get("doctor", "")
+    specialization = request.get("specialization", "General Physician")
+    accepted_insurance = request.get("accepted_insurance", ["insuranceA"])
+    udp_port = request.get("udp_port")
+    slots = request.get("slots", ["9AM", "11AM", "2PM", "4PM"])
+    
+    if not doctor:
+        send(conn, {"status": "FAIL", "reason": "Doctor name required"})
+        return
+
+    all_docs = scheduler.get_all_doctors()
+    if not udp_port:
+        existing_ports = [d["udp_port"] for d in all_docs.values() if "udp_port" in d]
+        udp_port = (max(existing_ports) + 1) if existing_ports else 5001
+
+    res = scheduler.register_doctor(doctor, specialization, accepted_insurance, udp_port, slots)
+    log(f"REGISTER_DOCTOR: {doctor} [{specialization}] port={udp_port} insurance={accepted_insurance}")
+    send(conn, res)
 
 def handle_admin_banned_ips(conn, request):
     send(conn, {"status": "OK", "banned_ips": rate_limiter.get_banned_ips()})
@@ -412,6 +448,7 @@ COMMAND_HANDLERS = {
     "DOCTOR_ONLINE": (handle_doctor_online, True),
     "DOCTOR_OFFLINE": (handle_doctor_offline, True),
     "GET_DOCTORS": (handle_get_doctors, True),
+    "REGISTER_DOCTOR": (handle_register_doctor, False),
 }
 
 def _client_loop(conn: socket.socket, addr: tuple) -> None:
@@ -452,15 +489,22 @@ def _client_loop(conn: socket.socket, addr: tuple) -> None:
 
 
 def main():
+    ssl_context = get_server_ssl_context()
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind((HOST, PORT))
     server_sock.listen(64)
 
-    log(f"=== Health Center Server started on {HOST}:{PORT} ===")
+    log(f"=== Health Center Server (TLS Secured) started on {HOST}:{PORT} ===")
 
     while True:
-        conn, addr = server_sock.accept()
+        raw_conn, addr = server_sock.accept()
+        try:
+            conn = ssl_context.wrap_socket(raw_conn, server_side=True)
+        except Exception as exc:
+            log(f"[TLS Handshake Error] {addr}: {exc}")
+            raw_conn.close()
+            continue
         t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
         t.start()
 

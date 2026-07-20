@@ -1,74 +1,188 @@
 {
     "doctor1": {
         "udp_port": 5001,
-        "slots": ["10AM", "11AM"],
-        "accepted_insurance": ["insuranceA", "insuranceB"],
+        "slots": [
+            "10AM",
+            "11AM"
+        ],
+        "accepted_insurance": [
+            "insuranceA",
+            "insuranceB"
+        ],
         "specialization": "General Physician"
     },
     "doctor5": {
         "udp_port": 5005,
-        "slots": ["9AM", "12PM"],
-        "accepted_insurance": ["insuranceA"],
+        "slots": [
+            "9AM",
+            "12PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
         "specialization": "General Physician"
     },
     "doctor6": {
         "udp_port": 5006,
-        "slots": ["2PM", "5PM"],
-        "accepted_insurance": ["insuranceB"],
+        "slots": [
+            "2PM",
+            "5PM"
+        ],
+        "accepted_insurance": [
+            "insuranceB"
+        ],
         "specialization": "General Physician"
     },
     "doctor2": {
         "udp_port": 5002,
-        "slots": ["12PM", "1PM"],
-        "accepted_insurance": ["insuranceB"],
+        "slots": [
+            "12PM",
+            "1PM"
+        ],
+        "accepted_insurance": [
+            "insuranceB"
+        ],
         "specialization": "Cardiologist"
     },
     "doctor7": {
         "udp_port": 5007,
-        "slots": ["9AM", "10AM"],
-        "accepted_insurance": ["insuranceA"],
+        "slots": [
+            "9AM",
+            "10AM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
         "specialization": "Cardiologist"
     },
     "doctor8": {
         "udp_port": 5008,
-        "slots": ["2PM", "3PM", "4PM"],
-        "accepted_insurance": ["insuranceA", "insuranceB"],
+        "slots": [
+            "2PM",
+            "3PM",
+            "4PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA",
+            "insuranceB"
+        ],
         "specialization": "Cardiologist"
     },
     "doctor3": {
         "udp_port": 5003,
-        "slots": ["2PM", "3PM"],
-        "accepted_insurance": ["insuranceA"],
+        "slots": [
+            "2PM",
+            "3PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
         "specialization": "Dermatologist"
     },
     "doctor9": {
         "udp_port": 5009,
-        "slots": ["11AM", "12PM"],
-        "accepted_insurance": ["insuranceB"],
+        "slots": [
+            "11AM",
+            "12PM"
+        ],
+        "accepted_insurance": [
+            "insuranceB"
+        ],
         "specialization": "Dermatologist"
     },
     "doctor10": {
         "udp_port": 5010,
-        "slots": ["9AM", "1PM", "5PM"],
-        "accepted_insurance": ["insuranceA", "insuranceB"],
+        "slots": [
+            "9AM",
+            "1PM",
+            "5PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA",
+            "insuranceB"
+        ],
         "specialization": "Dermatologist"
     },
     "doctor4": {
         "udp_port": 5004,
-        "slots": ["9AM", "10AM", "4PM"],
-        "accepted_insurance": ["insuranceA", "insuranceB"],
+        "slots": [
+            "9AM",
+            "10AM",
+            "4PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA",
+            "insuranceB"
+        ],
         "specialization": "Neurologist"
     },
     "doctor11": {
         "udp_port": 5011,
-        "slots": ["10AM", "11AM"],
-        "accepted_insurance": ["insuranceA"],
+        "slots": [
+            "10AM",
+            "11AM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
         "specialization": "Neurologist"
     },
     "doctor12": {
         "udp_port": 5012,
-        "slots": ["1PM", "2PM", "3PM"],
-        "accepted_insurance": ["insuranceB"],
+        "slots": [
+            "1PM",
+            "2PM",
+            "3PM"
+        ],
+        "accepted_insurance": [
+            "insuranceB"
+        ],
         "specialization": "Neurologist"
+    },
+    "doctor13": {
+        "udp_port": 5013,
+        "slots": [
+            "9AM",
+            "11AM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
+        "specialization": "Orthopedic"
+    },
+    "doctor14": {
+        "udp_port": 5014,
+        "slots": [
+            "2PM",
+            "4PM"
+        ],
+        "accepted_insurance": [
+            "insuranceB"
+        ],
+        "specialization": "Orthopedic"
+    },
+    "doctor15": {
+        "udp_port": 5015,
+        "slots": [
+            "10AM",
+            "1PM",
+            "3PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA",
+            "insuranceB"
+        ],
+        "specialization": "Pediatrician"
+    },
+    "doctor16": {
+        "udp_port": 5016,
+        "slots": [
+            "9AM",
+            "12PM"
+        ],
+        "accepted_insurance": [
+            "insuranceA"
+        ],
+        "specialization": "Pediatrician"
     }
 }

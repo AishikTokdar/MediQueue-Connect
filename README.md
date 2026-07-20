@@ -9,7 +9,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 ## 📊 Quick Badges
 
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
-![Platform Support](https://img.shields.io/badge/Platform-Windows%20(Full)%20%7C%20Linux%20(Limited)-success?style=for-the-badge&logo=windows&logoColor=white)
+![Platform Support](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-success?style=for-the-badge&logo=linux&logoColor=white)
 ![Protocols](https://img.shields.io/badge/Protocols-TCP%20%2B%20UDP-orange?style=for-the-badge)
 ![Security](https://img.shields.io/badge/Security-AES%20Fernet%20Encryption%20%2B%20Rate%20Limiter-red?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-GPLv3-lightgrey?style=for-the-badge)
@@ -197,69 +197,136 @@ pip install -r requirements.txt
 
 ---
 
-## 🔑 Pre-configured Accounts (For Testing)
+## 🔑 Pre-configured Accounts & Doctor Specializations (For Testing)
 
+### Patient Accounts
 To log in immediately, use any of the pre-configured patients. The default password is identical to the username:
 
-| Username | Default Password | Specializations Allowed | Pre-registered Insurance |
+| Username | Default Password | Covered Specializations | Pre-registered Insurance |
 | :--- | :--- | :--- | :--- |
-| `patient1` | `patient1` | General, Cardiologist, Dermatologist, Neurologist | `insuranceA` |
-| `patient2` | `patient2` | General, Cardiologist, Dermatologist, Neurologist | `insuranceB` |
-| `patient3` | `patient3` | General, Cardiologist, Dermatologist, Neurologist | `insuranceA`, `insuranceB` |
-| `patient4` | `patient4` | General, Cardiologist, Dermatologist, Neurologist | `insuranceA` |
-| `patient5` | `patient5` | General, Cardiologist, Dermatologist, Neurologist | `insuranceB` |
-| `patient6` | `patient6` | General, Cardiologist, Dermatologist, Neurologist | `insuranceA`, `insuranceB` |
+| `patient1` | `patient1` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
+| `patient2` | `patient2` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
+| `patient3` | `patient3` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
+| `patient4` | `patient4` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
+| `patient5` | `patient5` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
+| `patient6` | `patient6` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
 
-*Note: You can also create new users using the registration menu inside `patient.py`.*
+### Doctor Registry & Specialization Matrix (`data/doctors.json`)
+
+Doctors are categorized into specific specializations and accept different insurance policies:
+
+| Doctor ID | Specialization | Accepted Insurance | UDP Port | Available Slots |
+| :--- | :--- | :--- | :--- | :--- |
+| `doctor1` | General Physician | `insuranceA`, `insuranceB` | `5001` | `10AM`, `11AM` |
+| `doctor5` | General Physician | `insuranceA` | `5005` | `9AM`, `12PM` |
+| `doctor6` | General Physician | `insuranceB` | `5006` | `2PM`, `5PM` |
+| `doctor2` | Cardiologist | `insuranceB` | `5002` | `12PM`, `1PM` |
+| `doctor7` | Cardiologist | `insuranceA` | `5007` | `9AM`, `10AM` |
+| `doctor8` | Cardiologist | `insuranceA`, `insuranceB` | `5008` | `2PM`, `3PM`, `4PM` |
+| `doctor3` | Dermatologist | `insuranceA` | `5003` | `2PM`, `3PM` |
+| `doctor9` | Dermatologist | `insuranceB` | `5009` | `11AM`, `12PM` |
+| `doctor10` | Dermatologist | `insuranceA`, `insuranceB` | `5010` | `9AM`, `1PM`, `5PM` |
+| `doctor4` | Neurologist | `insuranceA`, `insuranceB` | `5004` | `9AM`, `10AM`, `4PM` |
+| `doctor11` | Neurologist | `insuranceA` | `5011` | `10AM`, `11AM` |
+| `doctor12` | Neurologist | `insuranceB` | `5012` | `1PM`, `2PM`, `3PM` |
+| `doctor13` | Orthopedic | `insuranceA` | `5013` | `9AM`, `11AM` |
+| `doctor14` | Orthopedic | `insuranceB` | `5014` | `2PM`, `4PM` |
+| `doctor15` | Pediatrician | `insuranceA`, `insuranceB` | `5015` | `10AM`, `1PM`, `3PM` |
+| `doctor16` | Pediatrician | `insuranceA` | `5016` | `9AM`, `12PM` |
+
+*Note: You can also register new doctors dynamically using `python clients/doctor.py`.*
 
 ---
 
-## 🚀 Step-by-Step Run Guide
+---
 
-To run a full simulation of the system, open **multiple terminal windows** and execute the commands in the order listed below.
+## ⚡ Execution Guide
 
-### 1. Start the Health Server
-First, start the central server that handles all requests, queue logic, and bookings:
+You can run MediQueue Connect either using the **Automated Launcher Scripts** (one-click startup for all components) or **Manually Step-by-Step**.
+
+---
+
+### 🚀 Option A: Automated One-Click Launcher (Recommended)
+
+Automated scripts spawn the Health Server, Doctor processes, and Dashboard in separate background windows, leaving your primary terminal ready for Patient interaction:
+
+#### On Linux / macOS / WSL / Git Bash:
+```bash
+chmod +x run_demo.sh
+./run_demo.sh
+```
+
+#### On Windows (CMD / PowerShell):
+```cmd
+run_demo.bat
+```
+
+*What the launcher does automatically:*
+1. Starts the TLS-Secured Health Server on port `4000`.
+2. Boots `doctor1` (General Physician) on UDP port `5001`.
+3. Boots `doctor2` (Cardiologist) on UDP port `5002`.
+4. Starts the Live Monitoring Dashboard.
+5. Connects your main terminal directly into the Patient CLI (`clients/patient.py`).
+
+---
+
+### 🛠️ Option B: Manual Step-by-Step Execution
+
+If you prefer launching each component manually across separate terminal windows:
+
+#### Step 1: Start the Health Center Server
+Open **Terminal 1** and start the central TLS control server:
 ```bash
 python server/health_server.py
 ```
-*Expected console output: `=== Health Center Server started on 127.0.0.1:4000 ===`*
+*Expected Console Output:*
+```text
+=== Health Center Server (TLS Secured) started on 127.0.0.1:4000 ===
+```
 
-### 2. Launch the Doctors
-Start one or more doctor clients to register them as online:
+#### Step 2: Launch Doctor Clients
+Open **Terminal 2** (and optionally **Terminal 3**) to set doctors online or register new doctor profiles:
 ```bash
-# Terminal A
+# Launch pre-configured doctor profile (Terminal 2)
 python clients/doctor.py doctor1
 
-# Terminal B (Optional, for multi-doctor demo)
-python clients/doctor.py doctor2
+# Launch via interactive startup menu to select profile or register new doctor (Terminal 3)
+python clients/doctor.py
 ```
-*Expected output: Displays specialization, UDP port, and prints `Waiting for patients...`*
+*Expected Console Output:*
+```text
+=======================================================
+  Dr. doctor1  –  General Physician
+  UDP port: 5001
+=======================================================
+  Waiting for patients...
+```
 
-### 3. Launch Patient Clients
-Open patient terminals to book appointments or initiate live consultations:
+#### Step 3: Launch Patient Clients
+Open **Terminal 4** to initiate appointment bookings or live consultations:
 ```bash
-# Terminal C (Patient 1)
-python clients/patient.py
-
-# Terminal D (Patient 2)
 python clients/patient.py
 ```
+*In the patient CLI:*
+1. Select **1. Login** or **2. Register**.
+2. Log in using `patient1` (password: `patient1`).
+3. Select **1. Book appointment** or **2. Request immediate consultation**.
+4. Filter by doctor specialization (e.g. *General Physician*, *Cardiologist*) to view doctors matching your insurance coverage.
 
-### 4. Monitor the System (Optional)
-Run the monitoring dashboard to observe active status, queues, and uptime:
+#### Step 4: Launch the Live Dashboard (Optional)
+Open **Terminal 5** to view real-time system metrics, doctor availability, queue positions, and server logs:
 ```bash
 python server/dashboard.py --interval 2
 ```
 
-### 5. Run the Admin Console (Optional)
-Manage database bookings, read conversation logs, or unban rate-limited clients:
+#### Step 5: Launch the Admin Console (Optional)
+Open **Terminal 6** to execute administrative commands (e.g. broadcast system alerts, terminate sessions, unban rate-limited IPs):
 ```bash
 python server/admin.py
 ```
 
-### 6. Run the Network Benchmarking Tool (Optional)
-Analyze latency differences between TCP and UDP:
+#### Step 6: Run Network Performance Analysis (Optional)
+Open **Terminal 7** to benchmark TCP vs UDP latency under customizable round-trip counts and payload sizes:
 ```bash
 python server/performance_analysis.py --rounds 50 --payload 128
 ```
@@ -335,12 +402,11 @@ MediQueue Connect includes basic security features suited for simulated and educ
 ### ⚠️ Windows Console Colors
 If ANSI escape sequences (like `\033[91m`) appear as raw characters in Windows Command Prompt, run the script once to enable virtual terminal processing, or use Windows Terminal (PowerShell).
 
-### ⚠️ OS Compatibility (Windows vs. Linux)
-> [!IMPORTANT]
-> The patient client (`clients/patient.py`) uses Python's Windows-only `msvcrt` module to detect input when waiting in the queue.
-> If a patient client is run on **Linux or macOS**, it will execute correctly until they enter a busy queue. At that point, the script will raise an `ImportError` because `msvcrt` is unavailable.
-> 
-> *Workaround for Linux/macOS users: Avoid entering busy queues during testing, or run the client on a Windows host.*
+### ⚠️ OS Compatibility & Terminal Performance
+> [!NOTE]
+> The patient client (`clients/patient.py`) uses a cross-platform non-blocking key detector (`check_cancel_key()`).
+> On **Windows**, it utilizes `msvcrt.kbhit()`. On **Linux and macOS**, it dynamically leverages `select.select()` and POSIX `termios` cbreak mode.
+> Queue cancellation via the `'c'` key is fully supported on Windows, Linux, and macOS without extra dependencies.
 
 ### ⚠️ Udp Port Conflicts
 Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ranging from `5001` to `5012`). If you receive a socket bind error, verify that no other process is using those ports:
@@ -353,14 +419,14 @@ Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ran
 
 To transition MediQueue Connect from an educational simulation to a production-grade application, several architectural improvements could be made:
 
-1. **Cross-Platform Queue Management**:
-   Replace the Windows-only `msvcrt` module in the queue loop with a multi-threaded non-blocking queue reader (e.g., using `select.select` or a separate input reader thread). This would make the patient client fully compatible with Linux and macOS.
-2. **TLS/SSL for TCP Socket Communication**:
-   Wrap the main TCP server socket using Python's `ssl` library. This would prevent credentials and session tokens from being sent in plaintext across the network, securing them against packet sniffing.
+1. **Cross-Platform Queue Management** *(Implemented ✓)*:
+   Implemented a unified non-blocking input layer (`check_cancel_key`) in `clients/patient.py`. Windows uses `msvcrt`, while Linux and macOS use `select.select` with POSIX `termios` cbreak mode for queue cancellation without blocking the thread.
+2. **TLS/SSL for TCP Socket Communication** *(Implemented ✓)*:
+   Wrapped the main TCP control listener (`health_server.py`) and all client applications (`patient.py`, `doctor.py`, `admin.py`, `dashboard.py`, `performance_analysis.py`) using Python's `ssl` module. The system automatically generates RSA-2048 self-signed TLS certificates stored in `data/certs/`, securing all control plane operations (credentials, tokens, bookings, administrative commands) against eavesdropping.
 3. **True Diffie-Hellman Key Exchange (DHKE)**:
    Implement an actual Diffie-Hellman or Elliptic Curve Diffie-Hellman (ECDH) key exchange protocol at the start of UDP sessions. This would allow patients and doctors to generate a shared session key without relying on a hardcoded passphrase (`HealthcareCN2024SecretPassphrase!`).
-4. **Dynamic Doctor Registration**:
-   Transition doctor configurations out of static JSON files. Allow doctors to register dynamically with the Health Server upon booting, specifying their specialization, availability, and preferred listening ports.
+4. **Dynamic Doctor Registration** *(Implemented ✓)*:
+   Implemented full dynamic doctor registration protocol (`REGISTER_DOCTOR` command). Doctors can launch `clients/doctor.py` without hardcoded configuration files, specify their specialization (*General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician* or custom), choose accepted insurance policies (*insuranceA*, *insuranceB*, or both), and assign listening UDP ports dynamically at boot time.
 5. **Persistent Database Integration**:
    Replace local JSON storage (`users.json`, `bookings.json`) with an ACID-compliant database like SQLite or PostgreSQL. This would resolve potential file-lock conflicts caused by concurrent read/write operations.
 6. **Real-time Audio/Video Streaming (RTP/RTCP)**:

@@ -1,5 +1,4 @@
 import socket
-import socket
 import json
 import sys
 import os
@@ -15,6 +14,7 @@ from crypto_utils import (
     encrypt_message,
     decrypt_message,
     crypto_available,
+    wrap_client_socket,
 )
 
 HOST = "127.0.0.1"
@@ -47,6 +47,38 @@ def tcp_recv(sock: socket.socket) -> dict:
         data += chunk
         if b"\n" in data:
             return json.loads(data.split(b"\n", 1)[0].decode())
+
+
+def check_cancel_key() -> bool:
+    """Cross-platform non-blocking check to detect if 'c' or 'C' was pressed (Windows & POSIX)."""
+    if sys.platform == "win32":
+        try:
+            import msvcrt
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                if char.lower() in (b'c', b'\x03'):
+                    return True
+        except Exception:
+            pass
+    else:
+        try:
+            import select
+            import termios
+            import tty
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setcbreak(fd)
+                rlist, _, _ = select.select([sys.stdin], [], [], 0)
+                if rlist:
+                    char = sys.stdin.read(1)
+                    if char.lower() in ('c', '\x03'):
+                        return True
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            pass
+    return False
 
 
 def show_appointments(tcp: socket.socket, token: str) -> list:
@@ -110,6 +142,7 @@ def main():  # noqa: C901
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         tcp.connect((HOST, PORT))
+        tcp = wrap_client_socket(tcp, server_hostname=HOST)
     except ConnectionRefusedError:
         print("\nHealth Server stopped")
         sys.exit(1)
@@ -121,6 +154,7 @@ def main():  # noqa: C901
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(2)
                 s.connect((HOST, PORT))
+                s = wrap_client_socket(s, server_hostname=HOST)
                 s.close()
             except Exception:
                 print("\nHealth Server stopped", flush=True)
@@ -178,6 +212,7 @@ def main():  # noqa: C901
         try:
             sub = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sub.connect((HOST, PORT))
+            sub = wrap_client_socket(sub, server_hostname=HOST)
             tcp_send(sub, {"command": "SUBSCRIBE", "token": token})
             data = b""
             while True:
@@ -221,10 +256,11 @@ def main():  # noqa: C901
             spec_res = tcp_recv(tcp)
             specs = spec_res.get("specializations", [])
 
-            print("\nAvailable Specializations:")
+            print("\nWhat type of doctor would you like to see?")
+            print("Select Specialization:")
             for idx, s in enumerate(specs, 1):
                 print(f"  {idx}. {s}")
-            print("  0. All")
+            print("  0. All Specializations")
 
             while True:
                 spec_choice = input("Filter by specialization (number or 0 for All): ").strip()
@@ -245,15 +281,15 @@ def main():  # noqa: C901
             slots = tcp_recv(tcp)
 
             if not slots:
-                print("No available slots match your criteria.")
-                tcp.close()
-                sys.exit(0)
+                print("\nNo available slots match your insurance coverage and specialization criteria.")
+                continue
 
-            print("\nAvailable Slots:")
+            print("\nMatching Doctors & Available Slots (Covered by your Insurance Policy):")
             doc_list = list(slots.keys())
             for idx, doc_name in enumerate(doc_list, 1):
                 info = slots[doc_name]
-                print(f"  {idx}. {doc_name:12}  [{info['specialization']:20}]  Slots: {', '.join(info['slots'])}")
+                acc_ins = ", ".join(info.get("accepted_insurance", []))
+                print(f"  {idx}. {doc_name:12}  [{info.get('specialization', 'General Physician'):20}]  (Insurance: {acc_ins:22})  Slots: {', '.join(info['slots'])}")
 
             while True:
                 doctor_input = input("Select doctor (name or number): ").strip()
@@ -293,10 +329,11 @@ def main():  # noqa: C901
             spec_res = tcp_recv(tcp)
             specs = spec_res.get("specializations", [])
 
-            print("\nAvailable Specializations:")
+            print("\nWhat type of doctor would you like to consult with?")
+            print("Select Specialization:")
             for idx, s in enumerate(specs, 1):
                 print(f"  {idx}. {s}")
-            print("  0. All")
+            print("  0. All Specializations")
 
             while True:
                 spec_choice = input("Filter by specialization (number or 0 for All): ").strip()
@@ -309,7 +346,7 @@ def main():  # noqa: C901
                     break
                 print("  Invalid option. Please enter a valid number.")
 
-            tcp_send(tcp, {"command": "GET_DOCTORS", "token": token})
+            tcp_send(tcp, {"command": "GET_DOCTORS", "token": token, "specialization": chosen_spec})
             doc_res = tcp_recv(tcp)
             
             if doc_res["status"] != "OK":
@@ -319,21 +356,21 @@ def main():  # noqa: C901
 
             all_doctors = doc_res.get("doctors", {})
 
-            print("\nAvailable Doctors:")
-            filtered_docs = {
-                d: info for d, info in all_doctors.items()
-                if not chosen_spec or chosen_spec.lower() in info.get("specialization", "").lower()
-            }
+            if not all_doctors:
+                print("\nNo doctors match your insurance coverage and specialization criteria.")
+                continue
 
             # Sort: online first (True > False), then specialization alphabetical, then name
             sorted_docs = sorted(
-                filtered_docs.items(),
+                all_doctors.items(),
                 key=lambda x: (not x[1].get("online", False), x[1].get("specialization", "").lower(), x[0].lower())
             )
 
+            print("\nMatching Doctors (Covered by your Insurance Policy):")
             for idx, (d, info) in enumerate(sorted_docs, 1):
                 status = "Online" if info.get("online", False) else "Offline"
-                print(f"  {idx}. {d:12}  [{info.get('specialization','General')}] ({status})")
+                acc_ins = ", ".join(info.get("accepted_insurance", []))
+                print(f"  {idx}. {d:12}  [{info.get('specialization','General Physician'):20}]  ({status:7})  Insurance: {acc_ins}")
 
             while True:
                 doctor_input = input("Choose doctor (name or number): ").strip()
@@ -384,7 +421,6 @@ def main():  # noqa: C901
         print(f"\n  Doctor is busy. You are #{pos} in the queue.")
         print("  Waiting... (Press 'c' to leave the queue)\n")
 
-        import msvcrt
         while True:
             tcp.settimeout(0.5)
             try:
@@ -397,15 +433,13 @@ def main():  # noqa: C901
                 tcp.close()
                 sys.exit(1)
 
-            if msvcrt.kbhit():
-                char = msvcrt.getch()
-                if char.lower() == b'c':
-                    tcp.settimeout(None)
-                    tcp_send(tcp, {"command": "CANCEL_QUEUE", "token": token, "doctor": doctor})
-                    tcp_recv(tcp)
-                    print("\nQueue cancelled. Goodbye!")
-                    tcp.close()
-                    sys.exit(0)
+            if check_cancel_key():
+                tcp.settimeout(None)
+                tcp_send(tcp, {"command": "CANCEL_QUEUE", "token": token, "doctor": doctor})
+                tcp_recv(tcp)
+                print("\nQueue cancelled. Goodbye!")
+                tcp.close()
+                sys.exit(0)
 
         tcp.settimeout(None)
 
@@ -438,7 +472,7 @@ def main():  # noqa: C901
         udp.close()
         tcp.close()
         sys.exit(1)
-    except ConnectionResetError:
+    except (ConnectionResetError, ConnectionRefusedError, OSError):
         print("Doctor is currently unresponsive or offline.")
         udp.close()
         tcp.close()
