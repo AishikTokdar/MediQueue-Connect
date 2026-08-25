@@ -34,23 +34,19 @@ def color_status(online: bool, busy: bool) -> str:
     return ansi(GREEN + BOLD, "● FREE")
 
 
+from protocol import send_framed, recv_framed
+
+
 def fetch_dashboard() -> dict | None:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(3.0)
         s.connect((HOST, PORT))
         s = wrap_client_socket(s, server_hostname=HOST)
-        s.sendall((json.dumps({"command": "DASHBOARD"}) + "\n").encode())
-        data = b""
-        while True:
-            chunk = s.recv(8192)
-            if not chunk:
-                break
-            data += chunk
-            if b"\n" in data:
-                break
+        send_framed(s, {"command": "GET_STATS"})
+        resp = recv_framed(s)
         s.close()
-        return json.loads(data.split(b"\n")[0].decode())
+        return resp
     except Exception:
         return None
 

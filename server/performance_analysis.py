@@ -41,6 +41,9 @@ def _udp_echo_server():
         s.close()
 
 
+from protocol import send_framed, recv_framed
+
+
 def measure_tcp(rounds: int) -> list[float]:
     latencies = []
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -51,26 +54,18 @@ def measure_tcp(rounds: int) -> list[float]:
         print("[ERROR] Cannot connect to Health Server – make sure health_server.py is running.")
         return latencies
 
-    # Intentionally failing login so we don't pollute the session table.
-    payload = (json.dumps({
+    payload = {
         "command": "LOGIN",
         "username": "perf_test_user",
         "password": "wrong_password",
-    }) + "\n").encode()
+    }
 
     for _ in range(rounds):
         t0 = time.perf_counter()
-        sock.sendall(payload)
-        data = b""
-        while True:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-            if b"\n" in data:
-                break
+        send_framed(sock, payload)
+        _resp = recv_framed(sock)
         t1 = time.perf_counter()
-        latencies.append((t1 - t0) * 1000)
+        latencies.append((t1 - t0) * 1000.0)
 
     sock.close()
     return latencies

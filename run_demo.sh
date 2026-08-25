@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =======================================================
-#   MediQueue Connect - Automated Cross-Platform Launcher
+#   MediQueue Connect - Automated Production Launcher
 # =======================================================
 
 echo "======================================================="
-echo "       MediQueue Connect - Automated Launcher"
+echo "    MediQueue Connect - Automated Production Launcher"
 echo "======================================================="
 echo ""
 
@@ -15,6 +15,16 @@ elif command -v python &>/dev/null; then
 else
     echo "Error: Python is not installed or not in PATH."
     exit 1
+fi
+
+if [[ "$1" == "--test" ]]; then
+    echo "[0/4] Running Automated Pytest Suite..."
+    $PYTHON_CMD -m pytest -v tests/
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Test suite failed! Aborting startup."
+        exit 1
+    fi
+    echo ""
 fi
 
 launch_terminal() {
@@ -39,7 +49,7 @@ launch_terminal() {
     fi
 }
 
-echo "[1/4] Starting Health Center Server..."
+echo "[1/4] Starting Async Health Center Server (Port 4000)..."
 launch_terminal "MediQueue Health Server" "$PYTHON_CMD server/health_server.py"
 sleep 2
 

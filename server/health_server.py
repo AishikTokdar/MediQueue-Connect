@@ -1,22 +1,29 @@
-import socket
-import threading
+import asyncio
 import json
-import uuid
-import sys
 import os
+import signal
+import socket
+import sys
 import time
+import uuid
+from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from scheduler import Scheduler
 from auth import AuthManager
-from logger import log
-from queue_manager import QueueManager
 from chat_history import ChatHistory
 from crypto_utils import get_server_ssl_context
+from db import get_audit_logs, init_db
+from logger import log, log_audit
+from protocol import async_recv_framed, async_send_framed
+from queue_manager import QueueManager
+from scheduler import Scheduler
+from schemas import validate_request_payload
 
 HOST = "127.0.0.1"
 PORT = 4000
+
+init_db()
 
 auth = AuthManager()
 scheduler = Scheduler()
@@ -24,26 +31,26 @@ queue_mgr = QueueManager()
 chat_hist = ChatHistory()
 
 _start_time = time.time()
-
-_stats_lock = threading.Lock()
+_stats_lock = asyncio.Lock()
 _stats = {
     "total_logins": 0,
     "total_bookings": 0,
     "total_chats": 0,
 }
 
+
 class RateLimiter:
     def __init__(self, rate: float = 10.0, capacity: float = 20.0, ban_time: float = 300.0):
         self.rate = rate
         self.capacity = capacity
         self.ban_time = ban_time
-        self.tokens = {}
-        self.last_ts = {}
-        self.banned = {}
-        self._lock = threading.Lock()
+        self.tokens: Dict[str, float] = {}
+        self.last_ts: Dict[str, float] = {}
+        self.banned: Dict[str, float] = {}
+        self._lock = asyncio.Lock()
 
-    def allow(self, ip: str) -> bool:
-        with self._lock:
+    async def allow(self, ip: str) -> bool:
+        async with self._lock:
             now = time.time()
             if ip in self.banned:
                 if now - self.banned[ip] < self.ban_time:
@@ -66,448 +73,281 @@ class RateLimiter:
                 self.tokens[ip] = self.capacity
                 return False
 
-    def get_banned_ips(self) -> list:
-        with self._lock:
+    async def get_banned_ips(self) -> List[str]:
+        async with self._lock:
             now = time.time()
             return [ip for ip, ts in list(self.banned.items()) if now - ts < self.ban_time]
             
-    def unban(self, ip: str) -> bool:
-        with self._lock:
+    async def unban(self, ip: str) -> bool:
+        async with self._lock:
             if ip in self.banned:
                 del self.banned[ip]
                 return True
             return False
 
+
 rate_limiter = RateLimiter()
 
-_active_subs_lock = threading.Lock()
-_active_subs = []
+_active_subs_lock = asyncio.Lock()
+_active_subs: List[asyncio.StreamWriter] = []
+_is_shutting_down = False
 
 
-def _incr(key: str) -> None:
-    with _stats_lock:
+async def _incr_stat(key: str) -> None:
+    async with _stats_lock:
         _stats[key] += 1
 
 
-def send(conn: socket.socket, payload: dict) -> None:
-    conn.sendall((json.dumps(payload) + "\n").encode())
-
-
-def _broadcast_to_subs(payload: dict) -> None:
-    with _active_subs_lock:
+async def _broadcast_to_subs(payload: Dict[str, Any]) -> None:
+    async with _active_subs_lock:
         to_remove = []
-        for sub in _active_subs:
+        for writer in _active_subs:
             try:
-                send(sub, payload)
+                await async_send_framed(writer, payload)
             except Exception:
-                to_remove.append(sub)
-        for sub in to_remove:
-            if sub in _active_subs:
-                _active_subs.remove(sub)
+                to_remove.append(writer)
+        for w in to_remove:
+            if w in _active_subs:
+                _active_subs.remove(w)
 
 
-def recv_line(conn: socket.socket, buf_size: int = 8192) -> str | None:
-    data = b""
-    while True:
-        chunk = conn.recv(buf_size)
-        if not chunk:
-            return None
-        data += chunk
-        if b"\n" in data:
-            return data.split(b"\n", 1)[0].decode()
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    peer_info = writer.get_extra_info("peername")
+    client_ip = peer_info[0] if peer_info else "unknown"
 
+    while not _is_shutting_down:
+        if not await rate_limiter.allow(client_ip):
+            log(f"IP {client_ip} rate limited & banned", level="WARN", client_ip=client_ip)
+            await async_send_framed(writer, {"status": "ERROR", "reason": "Rate limit exceeded. Temporary IP ban."})
+            break
 
-def handle_client(conn: socket.socket, addr: tuple) -> None:
+        data = await async_recv_framed(reader)
+        if data is None:
+            break
+
+        trace_id = str(uuid.uuid4())[:8]
+        cmd = data.get("command", "")
+        log(f"Received command: {cmd}", level="INFO", trace_id=trace_id, client_ip=client_ip)
+
+        # Validate input schema
+        is_valid, err_msg, validated_payload = validate_request_payload(cmd, data)
+        if not is_valid:
+            log(f"Invalid payload for {cmd}: {err_msg}", level="WARN", trace_id=trace_id)
+            await async_send_framed(writer, {"status": "ERROR", "reason": err_msg})
+            continue
+
+        resp = await process_command(cmd, data, client_ip, trace_id, writer)
+        if resp is not None:
+            await async_send_framed(writer, resp)
+
+    # Cleanup sub if subscribed
+    async with _active_subs_lock:
+        if writer in _active_subs:
+            _active_subs.remove(writer)
+
+    writer.close()
     try:
-        _client_loop(conn, addr)
-    except ConnectionError:
+        await writer.wait_closed()
+    except Exception:
         pass
-    except Exception as exc:
-        log(f"[ERROR] handle_client({addr}): {exc}")
-    finally:
-        conn.close()
 
 
-def handle_login(conn, request):
-    user = request.get("username", "")
-    pwd = request.get("password", "")
-
-    if auth.authenticate(user, pwd):
-        token = str(uuid.uuid4())
-        auth.create_session(token, user)
-        _incr("total_logins")
-        log(f"LOGIN OK: {user}")
-        insurances = auth.users[user].get("insurance", [])
-        send(conn, {"status": "OK", "token": token, "insurance": insurances})
-    else:
-        log(f"LOGIN FAIL: {user}")
-        send(conn, {"status": "FAIL", "reason": "Invalid credentials"})
-        
-def handle_register(conn, request):
-    user = request.get("username", "")
-    pwd = request.get("password", "")
-    insurance = request.get("insurance", [])
-    
-    if auth.register(user, pwd, insurance):
-        token = str(uuid.uuid4())
-        auth.create_session(token, user)
-        _incr("total_logins")
-        log(f"REGISTER OK: {user}")
-        send(conn, {"status": "OK", "token": token, "insurance": insurance})
-    else:
-        log(f"REGISTER FAIL (user exists): {user}")
-        send(conn, {"status": "FAIL", "reason": "Username already taken"})
-
-def handle_get_specializations(conn, request, token):
-    insurance = auth.get_insurance(token) if token else []
-    all_docs = scheduler.get_all_doctors()
-    
-    matching_specs = set()
-    online_specs = set()
-    for doc, info in all_docs.items():
-        doc_ins = info.get("accepted_insurance", [])
-        if not insurance or any(i in doc_ins for i in insurance):
-            spec = info.get("specialization", "General Physician")
-            matching_specs.add(spec)
-            if queue_mgr.is_online(doc):
-                online_specs.add(spec)
-    
-    sorted_specs = sorted(list(matching_specs), key=lambda s: (s not in online_specs, s))
-    send(conn, {"status": "OK", "specializations": sorted_specs})
-
-def handle_get_slots(conn, request, token):
-    insurance = auth.get_insurance(token)
-    specialization = request.get("specialization")
-    slots = scheduler.get_slots(insurance, specialization)
-    send(conn, slots)
-
-def handle_book_slot(conn, request, token):
-    doctor = request.get("doctor", "")
-    slot = request.get("slot", "")
-    user = auth.get_user(token)
-    result = scheduler.book_slot(user, doctor, slot)
-
-    if result["status"] == "BOOKED":
-        _incr("total_bookings")
-        log(f"BOOKED: {user} -> {doctor} @ {slot}")
-
-    send(conn, result)
-
-def handle_get_my_appointments(conn, request, token):
-    user = auth.get_user(token)
-    appointments = scheduler.get_bookings_for_patient(user)
-    send(conn, {"status": "OK", "appointments": appointments})
-
-def handle_cancel_my_booking(conn, request, token):
-    user = auth.get_user(token)
-    doctor = request.get("doctor", "")
-    slot = request.get("slot", "")
-
-    result = scheduler.remove_booking_for_patient(user, doctor, slot)
-    if result.get("status") == "OK":
-        log(f"PATIENT_CANCEL: {user} cancelled {doctor} @ {slot}")
-    send(conn, result)
-
-def handle_request_chat(conn, request, token):
-    doctor = request.get("doctor", "")
-    user = auth.get_user(token)
-    insurance = auth.get_insurance(token)
-    doctors_data = scheduler.get_all_doctors()
-
-    if doctor not in doctors_data:
-        send(conn, {"status": "FAIL", "reason": "Doctor not found"})
-        return
-
-    doc_info = doctors_data[doctor]
-    doc_ins = doc_info.get("accepted_insurance", [])
-    if not any(i in doc_ins for i in insurance):
-        send(conn, {"status": "FAIL", "reason": "Insurance mismatch: this doctor does not accept your insurance policy."})
-        return
-
-    if not queue_mgr.is_online(doctor):
-        send(conn, {"status": "FAIL", "reason": "Doctor is currently offline."})
-        return
-
-    udp_port = doctors_data[doctor]["udp_port"]
-
-    if queue_mgr.try_start_session(doctor, user):
-        log(f"REQUEST_CHAT: Granted immediately {user} -> {doctor}")
-        send(conn, {
-            "status": "READY",
-            "udp_port": udp_port,
-            "doctor": doctor,
-        })
-    else:
-        pos = queue_mgr.enqueue(doctor, user, conn)
-        send(conn, {
-            "status": "QUEUED",
-            "position": pos,
-            "doctor": doctor,
-            "message": f"Doctor is busy. You are #{pos} in queue.",
-        })
-
-def handle_start_chat(conn, request, token):
-    doctor = request.get("doctor", "")
-    session_id = request.get("session_id", str(uuid.uuid4()))
-    user = auth.get_user(token)
-    chat_hist.start_session(session_id, doctor, user)
-    _incr("total_chats")
-    log(f"START_CHAT: {user} <-> {doctor}  [session={session_id}]")
-    send(conn, {"status": "CHAT_LOGGED", "session_id": session_id})
-
-def handle_log_message(conn, request, token):
-    session_id = request.get("session_id", "")
-    sender = request.get("sender", "")
-    text = request.get("text", "")
-    session = chat_hist.get_session(session_id)
-    if session:
-        session.log_message(sender, text)
-    send(conn, {"status": "OK"})
-
-def handle_terminate_chat(conn, request, token):
-    doctor = request.get("doctor", "")
-    session_id = request.get("session_id", "")
-    user = auth.get_user(token)
-    chat_hist.end_session(session_id, reason="CLIENT_TERMINATED")
-    log(f"TERMINATE_CHAT: {user} <-> {doctor}  [session={session_id}]")
-    send(conn, {"status": "CHAT_TERMINATED_LOGGED"})
-
-def handle_end_session(conn, request, token):
-    doctor = request.get("doctor", "")
-    session_id = request.get("session_id", "")
-    is_doctor = (token == "DOCTOR_INTERNAL")
-    user = auth.get_user(token) if not is_doctor else doctor
-    chat_hist.end_session(session_id, reason="NORMAL")
-    log(f"END_SESSION: {doctor} now free (triggered by {user})")
-
-    while True:
-        next_patient = queue_mgr.end_session(doctor)
-        if not next_patient:
-            break
-        next_user, next_conn = next_patient
-        doctors_data = scheduler.get_all_doctors()
-        udp_port = doctors_data[doctor]["udp_port"]
-        log(f"QUEUE: Notifying next patient {next_user} -> {doctor}")
-        try:
-            send(next_conn, {
-                "status": "TURN_READY",
-                "udp_port": udp_port,
-                "doctor": doctor,
-                "message": "Doctor is now available. Connecting you...",
-            })
-            break
-        except Exception as e:
-            log(f"[WARN] Could not notify {next_user}: {e}. Trying next in queue...")
-
-    send(conn, {"status": "SESSION_ENDED"})
-
-def handle_cancel_queue(conn, request, token):
-    doctor = request.get("doctor", "")
-    user = auth.get_user(token)
-    queue_mgr.remove_from_queue(doctor, user)
-    send(conn, {"status": "QUEUE_CANCELLED"})
-    log(f"CANCEL_QUEUE: {user} left queue for {doctor}")
-
-def handle_dashboard(conn, request):
-    snap = queue_mgr.snapshot()
-    with _stats_lock:
-        stats_copy = dict(_stats)
-    stats_copy["uptime"] = int(time.time() - _start_time)
-    send(conn, {
-        "status": "OK",
-        "queue_state": snap,
-        "stats": stats_copy,
-        "banned_ips": rate_limiter.get_banned_ips()
-    })
-
-def handle_admin_get_bookings(conn, request):
-    bookings = scheduler.get_all_bookings()
-    send(conn, {"status": "OK", "bookings": bookings})
-
-def handle_admin_remove_booking(conn, request):
-    doctor = request.get("doctor", "")
-    slot = request.get("slot", "")
-    if scheduler.remove_booking(doctor, slot):
-        send(conn, {"status": "OK"})
-        log(f"ADMIN: Removed booking {slot} for {doctor}")
-    else:
-        send(conn, {"status": "FAIL", "reason": "Booking not found"})
-
-def handle_doctor_online(conn, request, token):
-    if token != "DOCTOR_INTERNAL":
-        send(conn, {"status": "INVALID_SESSION"})
-        return
-    doctor = request.get("doctor", "")
-    queue_mgr.set_online(doctor, True)
-    log(f"LOGIN OK (DOCTOR): {doctor} is now ONLINE")
-    send(conn, {"status": "OK"})
-
-def handle_doctor_offline(conn, request, token):
-    if token != "DOCTOR_INTERNAL":
-        send(conn, {"status": "INVALID_SESSION"})
-        return
-    doctor = request.get("doctor", "")
-    queue_mgr.set_online(doctor, False)
-    log(f"LOGOUT (DOCTOR): {doctor} is now OFFLINE")
-    send(conn, {"status": "OK"})
-
-def handle_get_doctors(conn, request, token):
-    insurance = auth.get_insurance(token)
-    specialization = request.get("specialization")
-    all_docs = scheduler.get_all_doctors()
-    augmented_docs = {}
-    for doc_name, doc_info in all_docs.items():
-        if not any(i in doc_info.get("accepted_insurance", []) for i in insurance):
-            continue
-        if specialization and specialization.lower() not in doc_info.get("specialization", "").lower():
-            continue
-        info_copy = doc_info.copy()
-        info_copy["online"] = queue_mgr.is_online(doc_name)
-        augmented_docs[doc_name] = info_copy
-    send(conn, {"status": "OK", "doctors": augmented_docs})
-
-def handle_register_doctor(conn, request):
-    doctor = request.get("doctor", "")
-    specialization = request.get("specialization", "General Physician")
-    accepted_insurance = request.get("accepted_insurance", ["insuranceA"])
-    udp_port = request.get("udp_port")
-    slots = request.get("slots", ["9AM", "11AM", "2PM", "4PM"])
-    
-    if not doctor:
-        send(conn, {"status": "FAIL", "reason": "Doctor name required"})
-        return
-
-    all_docs = scheduler.get_all_doctors()
-    if not udp_port:
-        existing_ports = [d["udp_port"] for d in all_docs.values() if "udp_port" in d]
-        udp_port = (max(existing_ports) + 1) if existing_ports else 5001
-
-    res = scheduler.register_doctor(doctor, specialization, accepted_insurance, udp_port, slots)
-    log(f"REGISTER_DOCTOR: {doctor} [{specialization}] port={udp_port} insurance={accepted_insurance}")
-    send(conn, res)
-
-def handle_admin_banned_ips(conn, request):
-    send(conn, {"status": "OK", "banned_ips": rate_limiter.get_banned_ips()})
-
-def handle_admin_unban_ip(conn, request):
-    ip = request.get("ip", "")
-    if rate_limiter.unban(ip):
-        send(conn, {"status": "OK"})
-        log(f"ADMIN: Unbanned IP {ip}")
-    else:
-        send(conn, {"status": "FAIL", "reason": "IP not found in ban list"})
-
-def handle_subscribe(conn, request):
-    try:
-        with _active_subs_lock:
-            _active_subs.append(conn)
-        while True:
-            d = conn.recv(1024)
-            if not d: break
-    except ConnectionError:
-        pass
-    finally:
-        with _active_subs_lock:
-            if conn in _active_subs:
-                _active_subs.remove(conn)
-
-def handle_admin_global_msg(conn, request):
-    msg = request.get("message", "")
-    _broadcast_to_subs({"status": "GLOBAL_MSG", "message": msg})
-    send(conn, {"status": "OK"})
-
-def handle_admin_kill_session(conn, request):
-    session_id = request.get("session_id", "")
-    _broadcast_to_subs({"status": "KILL_SESSION", "session_id": session_id})
-    send(conn, {"status": "OK"})
-
-
-COMMAND_HANDLERS = {
-    "LOGIN": (handle_login, False),
-    "REGISTER": (handle_register, False),
-    "DASHBOARD": (handle_dashboard, False),
-    "ADMIN_GET_BOOKINGS": (handle_admin_get_bookings, False),
-    "ADMIN_REMOVE_BOOKING": (handle_admin_remove_booking, False),
-    "ADMIN_BANNED_IPS": (handle_admin_banned_ips, False),
-    "ADMIN_UNBAN_IP": (handle_admin_unban_ip, False),
-    "SUBSCRIBE": (handle_subscribe, False),
-    "ADMIN_GLOBAL_MSG": (handle_admin_global_msg, False),
-    "ADMIN_KILL_SESSION": (handle_admin_kill_session, False),
-    
-    "GET_SPECIALIZATIONS": (handle_get_specializations, True),
-    "GET_SLOTS": (handle_get_slots, True),
-    "BOOK_SLOT": (handle_book_slot, True),
-    "GET_MY_APPOINTMENTS": (handle_get_my_appointments, True),
-    "CANCEL_MY_BOOKING": (handle_cancel_my_booking, True),
-    "REQUEST_CHAT": (handle_request_chat, True),
-    "START_CHAT": (handle_start_chat, True),
-    "LOG_MESSAGE": (handle_log_message, True),
-    "TERMINATE_CHAT": (handle_terminate_chat, True),
-    "END_SESSION": (handle_end_session, True),
-    "CANCEL_QUEUE": (handle_cancel_queue, True),
-    "DOCTOR_ONLINE": (handle_doctor_online, True),
-    "DOCTOR_OFFLINE": (handle_doctor_offline, True),
-    "GET_DOCTORS": (handle_get_doctors, True),
-    "REGISTER_DOCTOR": (handle_register_doctor, False),
-}
-
-def _client_loop(conn: socket.socket, addr: tuple) -> None:
-    ip = addr[0]
-    while True:
-        raw = recv_line(conn)
-        if raw is None:
-            break
-
-        if not rate_limiter.allow(ip):
-            send(conn, {"status": "FAIL", "reason": "BANNED: Rate limit exceeded."})
-            log(f"[WARN] IP {ip} rate limited and temporarily banned.")
-            return
-
-        try:
-            request = json.loads(raw)
-        except json.JSONDecodeError:
-            send(conn, {"status": "BAD_REQUEST", "reason": "Invalid JSON"})
-            continue
-
-        command = request.get("command", "")
-        if command not in COMMAND_HANDLERS:
-            send(conn, {"status": "UNKNOWN_COMMAND", "command": command})
-            continue
-            
-        handler, requires_auth = COMMAND_HANDLERS[command]
-        
-        if requires_auth:
-            token = request.get("token", "")
-            is_doctor_internal = (token == "DOCTOR_INTERNAL")
-            if not is_doctor_internal and not auth.validate(token):
-                send(conn, {"status": "INVALID_SESSION"})
-                continue
-            handler(conn, request, token)
+async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_id: str, writer: asyncio.StreamWriter) -> Optional[Dict[str, Any]]:
+    if cmd == "LOGIN":
+        username = data.get("username", "")
+        password = data.get("password", "")
+        if auth.authenticate(username, password):
+            token = str(uuid.uuid4())
+            auth.create_session(token, username)
+            await _incr_stat("total_logins")
+            log_audit("USER_LOGIN", user=username, trace_id=trace_id, details=f"IP: {client_ip}")
+            return {"status": "OK", "token": token, "username": username}
         else:
-            handler(conn, request)
+            log("Login failed", level="WARN", trace_id=trace_id, client_ip=client_ip)
+            return {"status": "FAIL", "reason": "Invalid credentials"}
+
+    elif cmd == "REGISTER":
+        username = data.get("username", "")
+        password = data.get("password", "")
+        insurance = data.get("insurance", [])
+        if auth.register(username, password, insurance):
+            log_audit("USER_REGISTER", user=username, trace_id=trace_id)
+            return {"status": "OK"}
+        else:
+            return {"status": "FAIL", "reason": "Username already exists"}
+
+    elif cmd == "GET_SLOTS":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user_insurance = auth.get_insurance(token)
+        specialization = data.get("specialization")
+        slots = scheduler.get_slots(user_insurance, specialization)
+        return {"status": "OK", "doctors": slots}
+
+    elif cmd == "BOOK":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        slot = data.get("slot", "")
+        resp = scheduler.book_slot(user, doctor, slot)
+        if resp.get("status") == "BOOKED":
+            await _incr_stat("total_bookings")
+            log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}")
+        return resp
+
+    elif cmd == "MY_BOOKINGS":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        bookings = scheduler.get_bookings_for_patient(user)
+        return {"status": "OK", "bookings": bookings}
+
+    elif cmd == "CANCEL_BOOKING":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        slot = data.get("slot", "")
+        return scheduler.remove_booking_for_patient(user, doctor, slot)
+
+    elif cmd == "JOIN_QUEUE":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        pos = queue_mgr.enqueue(doctor, user)
+        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
+        return {"status": "QUEUED", "position": pos, "doctor": doctor}
+
+    elif cmd == "LEAVE_QUEUE":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        success = queue_mgr.dequeue_patient(doctor, user)
+        return {"status": "OK" if success else "FAIL"}
+
+    elif cmd == "NEXT_PATIENT":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        doctor = data.get("doctor", "")
+        next_patient = queue_mgr.dequeue_next(doctor)
+        if next_patient:
+            await _incr_stat("total_chats")
+            log_audit("NEXT_PATIENT", user=doctor, trace_id=trace_id, details=f"Patient: {next_patient}")
+            return {"status": "OK", "next_patient": next_patient}
+        return {"status": "EMPTY", "reason": "No patients in queue"}
+
+    elif cmd == "GET_QUEUE":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        doctor = data.get("doctor", "")
+        q = queue_mgr.get_queue(doctor)
+        return {"status": "OK", "queue": q}
+
+    elif cmd == "GET_SPECIALIZATIONS":
+        specs = scheduler.get_specializations()
+        return {"status": "OK", "specializations": specs}
+
+    elif cmd == "GET_STATS":
+        banned = await rate_limiter.get_banned_ips()
+        async with _stats_lock:
+            st = dict(_stats)
+        st["uptime_seconds"] = int(time.time() - _start_time)
+        st["banned_ips"] = banned
+        st["all_bookings"] = scheduler.get_all_bookings()
+        st["all_queues"] = queue_mgr.get_all_queues()
+        st["doctors"] = scheduler.get_all_doctors()
+        return {"status": "OK", "stats": st}
+
+    elif cmd == "SUBSCRIBE_STATS":
+        async with _active_subs_lock:
+            if writer not in _active_subs:
+                _active_subs.append(writer)
+        return {"status": "SUBSCRIBED"}
+
+    elif cmd == "UNBAN_IP":
+        ip = data.get("ip", "")
+        unbanned = await rate_limiter.unban(ip)
+        log_audit("UNBAN_IP", user="ADMIN", trace_id=trace_id, details=f"IP: {ip}")
+        return {"status": "OK" if unbanned else "FAIL"}
+
+    elif cmd == "CLEAR_BOOKING":
+        doctor = data.get("doctor", "")
+        slot = data.get("slot", "")
+        success = scheduler.remove_booking(doctor, slot)
+        return {"status": "OK" if success else "FAIL"}
+
+    elif cmd == "AUDIT_LOGS":
+        token = data.get("token", "")
+        limit = data.get("limit", 50)
+        logs = get_audit_logs(limit)
+        return {"status": "OK", "logs": logs}
+
+    elif cmd == "REGISTER_DOCTOR":
+        doc = data.get("doctor", "")
+        spec = data.get("specialization", "General")
+        ins = data.get("accepted_insurance", [])
+        port = data.get("udp_port", 5000)
+        slots = data.get("slots", ["9AM", "11AM", "2PM", "4PM"])
+        return scheduler.register_doctor(doc, spec, ins, port, slots)
+
+    return {"status": "ERROR", "reason": "Unknown command"}
 
 
+async def main() -> None:
+    global _is_shutting_down
+    loop = asyncio.get_running_loop()
 
-def main():
-    ssl_context = get_server_ssl_context()
-    server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_sock.bind((HOST, PORT))
-    server_sock.listen(64)
+    # Try loading TLS context, fallback to plain TCP if cert generation unneeded/optional
+    ssl_context = None
+    try:
+        ssl_context = get_server_ssl_context()
+        log("TLS SSLContext initialized for server", level="INFO")
+    except Exception as e:
+        log(f"TLS context initialization skipped: {e}. Running in standard TCP mode.", level="WARN")
 
-    log(f"=== Health Center Server (TLS Secured) started on {HOST}:{PORT} ===")
+    server = await asyncio.start_server(handle_client, HOST, PORT, ssl=ssl_context)
+    addr = server.sockets[0].getsockname()
+    log(f"Health Server running on {addr[0]}:{addr[1]} (Asyncio Core)", level="INFO")
 
-    while True:
-        raw_conn, addr = server_sock.accept()
-        try:
-            conn = ssl_context.wrap_socket(raw_conn, server_side=True)
-        except Exception as exc:
-            log(f"[TLS Handshake Error] {addr}: {exc}")
-            raw_conn.close()
-            continue
-        t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
-        t.start()
+    stop_event = asyncio.Event()
+
+    def _on_shutdown_signal():
+        global _is_shutting_down
+        log("Shutdown signal received! Initiating graceful shutdown...", level="WARN")
+        _is_shutting_down = True
+        stop_event.set()
+
+    # Trapping SIGINT and SIGTERM
+    if sys.platform != "win32":
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, _on_shutdown_signal)
+
+    try:
+        await stop_event.wait()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        _is_shutting_down = True
+
+    log("Notifying connected clients of shutdown...", level="INFO")
+    await _broadcast_to_subs({"status": "SHUTDOWN", "reason": "Server undergoing graceful shutdown"})
+
+    server.close()
+    await server.wait_closed()
+    log("Server shutdown completed cleanly.", level="INFO")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServer terminated by user.")

@@ -33,11 +33,21 @@ htmlcov/
 # Generic logs
 *.log
 
-# Local environment and secrets
+# Local environment, certificates, and secrets
 .env
 .env.*
 *.pem
 *.key
+*.crt
+data/certs/
+
+# Database artifacts
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/mediqueue.db*
 
 # IDE/editor settings
 .vscode/

@@ -34,19 +34,18 @@ def banner(text: str) -> None:
     print(f"{'='*55}")
 
 
+from protocol import send_framed, recv_framed
+
+
 def tcp_send(sock: socket.socket, payload: dict) -> None:
-    sock.sendall((json.dumps(payload) + "\n").encode())
+    send_framed(sock, payload)
 
 
 def tcp_recv(sock: socket.socket) -> dict:
-    data = b""
-    while True:
-        chunk = sock.recv(8192)
-        if not chunk:
-            raise ConnectionError("Server disconnected")
-        data += chunk
-        if b"\n" in data:
-            return json.loads(data.split(b"\n", 1)[0].decode())
+    res = recv_framed(sock)
+    if res is None:
+        raise ConnectionError("Server disconnected")
+    return res
 
 
 def check_cancel_key() -> bool:

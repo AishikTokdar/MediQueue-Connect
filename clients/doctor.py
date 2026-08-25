@@ -23,22 +23,18 @@ SERVER_PORT = 4000
 _current_session_id = None
 
 
+from protocol import send_framed, recv_framed
+
+
 def send_tcp(payload: dict) -> dict | None:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, SERVER_PORT))
         s = wrap_client_socket(s, server_hostname=HOST)
-        s.sendall((json.dumps(payload) + "\n").encode())
-        data = b""
-        while True:
-            chunk = s.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-            if b"\n" in data:
-                break
+        send_framed(s, payload)
+        resp = recv_framed(s)
         s.close()
-        return json.loads(data.split(b"\n")[0].decode())
+        return resp
     except Exception as e:
         print(f"[WARN] TCP to server failed: {e}")
         return None
