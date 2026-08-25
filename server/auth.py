@@ -5,6 +5,9 @@ from typing import Dict, List, Optional
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
 from db import get_db_connection, init_db, add_audit_log
+from cache import CacheManager
+
+cache = CacheManager()
 
 
 class AuthManager:
@@ -20,7 +23,6 @@ class AuthManager:
     def _verify_password(self, pwd: str, hash_val: str) -> bool:
         if not hash_val:
             return False
-        # Check if legacy SHA-256 hash (64 hex characters)
         if len(hash_val) == 64 and all(c in "0123456789abcdefABCDEF" for c in hash_val):
             sha_matches = hashlib.sha256(pwd.encode()).hexdigest() == hash_val
             return sha_matches
@@ -42,7 +44,6 @@ class AuthManager:
         if not self._verify_password(pwd, current_hash):
             return False
 
-        # Upgrade legacy hash to Argon2id if needed
         if len(current_hash) == 64:
             new_hash = self._hash_password(pwd)
             with conn:
@@ -73,15 +74,22 @@ class AuthManager:
 
     def create_session(self, token: str, user: str) -> None:
         self.sessions[token] = user
+        cache.set_session(token, user)
 
     def validate(self, token: str) -> bool:
+        cached_user = cache.get_session(token)
+        if cached_user:
+            return True
         return token in self.sessions
 
     def get_user(self, token: str) -> str:
+        cached_user = cache.get_session(token)
+        if cached_user:
+            return cached_user
         return self.sessions.get(token, "")
 
     def get_insurance(self, token: str) -> List[str]:
-        user = self.sessions.get(token, "")
+        user = self.get_user(token)
         if not user:
             return []
         conn = get_db_connection()
@@ -97,3 +105,4 @@ class AuthManager:
 
     def invalidate(self, token: str) -> None:
         self.sessions.pop(token, None)
+        cache.delete_session(token)

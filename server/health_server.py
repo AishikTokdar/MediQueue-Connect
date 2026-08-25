@@ -19,6 +19,14 @@ from protocol import async_recv_framed, async_send_framed
 from queue_manager import QueueManager
 from scheduler import Scheduler
 from schemas import validate_request_payload
+from metrics import (
+    ACTIVE_CONNECTIONS,
+    BOOKINGS_TOTAL,
+    QUEUE_DEPTH,
+    REQUEST_LATENCY,
+    REQUESTS_TOTAL,
+    start_metrics_server,
+)
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -115,41 +123,53 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     peer_info = writer.get_extra_info("peername")
     client_ip = peer_info[0] if peer_info else "unknown"
 
-    while not _is_shutting_down:
-        if not await rate_limiter.allow(client_ip):
-            log(f"IP {client_ip} rate limited & banned", level="WARN", client_ip=client_ip)
-            await async_send_framed(writer, {"status": "ERROR", "reason": "Rate limit exceeded. Temporary IP ban."})
-            break
-
-        data = await async_recv_framed(reader)
-        if data is None:
-            break
-
-        trace_id = str(uuid.uuid4())[:8]
-        cmd = data.get("command", "")
-        log(f"Received command: {cmd}", level="INFO", trace_id=trace_id, client_ip=client_ip)
-
-        # Validate input schema
-        is_valid, err_msg, validated_payload = validate_request_payload(cmd, data)
-        if not is_valid:
-            log(f"Invalid payload for {cmd}: {err_msg}", level="WARN", trace_id=trace_id)
-            await async_send_framed(writer, {"status": "ERROR", "reason": err_msg})
-            continue
-
-        resp = await process_command(cmd, data, client_ip, trace_id, writer)
-        if resp is not None:
-            await async_send_framed(writer, resp)
-
-    # Cleanup sub if subscribed
-    async with _active_subs_lock:
-        if writer in _active_subs:
-            _active_subs.remove(writer)
-
-    writer.close()
+    ACTIVE_CONNECTIONS.inc()
     try:
-        await writer.wait_closed()
-    except Exception:
-        pass
+        while not _is_shutting_down:
+            if not await rate_limiter.allow(client_ip):
+                log(f"IP {client_ip} rate limited & banned", level="WARN", client_ip=client_ip)
+                REQUESTS_TOTAL.labels(command="UNKNOWN", status="BANNED").inc()
+                await async_send_framed(writer, {"status": "ERROR", "reason": "Rate limit exceeded. Temporary IP ban."})
+                break
+
+            data = await async_recv_framed(reader)
+            if data is None:
+                break
+
+            trace_id = str(uuid.uuid4())[:8]
+            cmd = data.get("command", "UNKNOWN")
+            log(f"Received command: {cmd}", level="INFO", trace_id=trace_id, client_ip=client_ip)
+
+            # Validate input schema
+            is_valid, err_msg, validated_payload = validate_request_payload(cmd, data)
+            if not is_valid:
+                log(f"Invalid payload for {cmd}: {err_msg}", level="WARN", trace_id=trace_id)
+                REQUESTS_TOTAL.labels(command=cmd, status="INVALID_SCHEMA").inc()
+                await async_send_framed(writer, {"status": "ERROR", "reason": err_msg})
+                continue
+
+            t0 = time.perf_counter()
+            resp = await process_command(cmd, data, client_ip, trace_id, writer)
+            t1 = time.perf_counter()
+            
+            status = resp.get("status", "OK") if resp else "NO_RESPONSE"
+            REQUESTS_TOTAL.labels(command=cmd, status=status).inc()
+            REQUEST_LATENCY.labels(command=cmd).observe(t1 - t0)
+
+            if resp is not None:
+                await async_send_framed(writer, resp)
+
+    finally:
+        ACTIVE_CONNECTIONS.dec()
+        async with _active_subs_lock:
+            if writer in _active_subs:
+                _active_subs.remove(writer)
+
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
 
 
 async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_id: str, writer: asyncio.StreamWriter) -> Optional[Dict[str, Any]]:
@@ -195,6 +215,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         resp = scheduler.book_slot(user, doctor, slot)
         if resp.get("status") == "BOOKED":
             await _incr_stat("total_bookings")
+            BOOKINGS_TOTAL.inc()
             log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}")
         return resp
 
@@ -222,6 +243,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         user = auth.get_user(token)
         doctor = data.get("doctor", "")
         pos = queue_mgr.enqueue(doctor, user)
+        QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
         log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
         return {"status": "QUEUED", "position": pos, "doctor": doctor}
 
@@ -232,6 +254,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         user = auth.get_user(token)
         doctor = data.get("doctor", "")
         success = queue_mgr.dequeue_patient(doctor, user)
+        QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
         return {"status": "OK" if success else "FAIL"}
 
     elif cmd == "NEXT_PATIENT":
@@ -240,6 +263,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             return {"status": "ERROR", "reason": "Invalid token"}
         doctor = data.get("doctor", "")
         next_patient = queue_mgr.dequeue_next(doctor)
+        QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
         if next_patient:
             await _incr_stat("total_chats")
             log_audit("NEXT_PATIENT", user=doctor, trace_id=trace_id, details=f"Patient: {next_patient}")
@@ -308,7 +332,10 @@ async def main() -> None:
     global _is_shutting_down
     loop = asyncio.get_running_loop()
 
-    # Try loading TLS context, fallback to plain TCP if cert generation unneeded/optional
+    # Start Prometheus telemetry exporter on port 8000
+    if start_metrics_server(8000):
+        log("Prometheus operational telemetry exporter started on http://127.0.0.1:8000/metrics", level="INFO")
+
     ssl_context = None
     try:
         ssl_context = get_server_ssl_context()
@@ -328,7 +355,6 @@ async def main() -> None:
         _is_shutting_down = True
         stop_event.set()
 
-    # Trapping SIGINT and SIGTERM
     if sys.platform != "win32":
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, _on_shutdown_signal)

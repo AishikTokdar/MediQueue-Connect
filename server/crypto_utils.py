@@ -11,7 +11,7 @@ try:
 except ImportError:
     _CRYPTO_AVAILABLE = False
 
-APP_PASSPHRASE = b"HealthcareCN2024SecretPassphrase!"
+APP_PASSPHRASE = b"blue-scrubs-and-cold-coffee-2026"
 
 
 def _derive_key(passphrase: bytes) -> bytes:

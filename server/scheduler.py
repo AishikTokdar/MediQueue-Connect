@@ -2,6 +2,9 @@ import json
 import threading
 from typing import Any, Dict, List, Optional
 from db import get_db_connection, init_db, add_audit_log
+from cache import CacheManager
+
+cache = CacheManager()
 
 
 class Scheduler:
@@ -33,10 +36,16 @@ class Scheduler:
             cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
             if cur.rowcount > 0:
                 add_audit_log(action="ADMIN_CANCEL_BOOKING", user="ADMIN", details=f"Doctor: {doctor}, Slot: {slot}")
+                cache.invalidate_slots_cache()
                 return True
         return False
 
     def get_slots(self, insurance: List[str], specialization: Optional[str] = None) -> Dict[str, Any]:
+        cache_key = f"{','.join(sorted(insurance))}:{specialization or 'ALL'}"
+        cached_result = cache.get_slots_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT name, specialization, accepted_insurance, udp_port, slots FROM doctors")
@@ -76,6 +85,8 @@ class Scheduler:
                 "specialization": spec,
                 "udp_port": udp_port,
             }
+
+        cache.set_slots_cache(cache_key, filtered, ttl=60)
         return filtered
 
     def get_slots_by_insurance(self, insurance: List[str]) -> Dict[str, Any]:
@@ -98,18 +109,17 @@ class Scheduler:
             if slot not in valid_slots:
                 return {"status": "UNAVAILABLE", "reason": "Slot does not exist"}
 
-            # Check if already booked
             cur.execute("SELECT id FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
             if cur.fetchone():
                 return {"status": "UNAVAILABLE", "reason": "Slot already booked"}
 
-            # Insert atomic booking
             try:
                 cur.execute(
                     "INSERT INTO bookings (doctor, slot, patient) VALUES (?, ?, ?)",
                     (doctor, slot, user)
                 )
                 add_audit_log(action="BOOK_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}")
+                cache.invalidate_slots_cache()
                 return {
                     "status": "BOOKED",
                     "doctor": doctor,
@@ -155,6 +165,7 @@ class Scheduler:
 
             cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
             add_audit_log(action="CANCEL_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}")
+            cache.invalidate_slots_cache()
             return {"status": "OK"}
 
     def get_all_doctors(self) -> Dict[str, Any]:
@@ -201,5 +212,6 @@ class Scheduler:
                 VALUES (?, ?, ?, ?, ?)
             """, (doctor, specialization, json.dumps(accepted_insurance), udp_port, json.dumps(slots)))
             add_audit_log(action="REGISTER_DOCTOR", user=doctor, details=f"Spec: {specialization}, Port: {udp_port}")
+            cache.invalidate_slots_cache()
 
         return {"status": "OK", "doctor": doctor, "udp_port": udp_port}
