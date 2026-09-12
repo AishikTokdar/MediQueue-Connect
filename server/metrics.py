@@ -28,6 +28,19 @@ BOOKINGS_TOTAL = Counter(
     "Total appointment bookings created"
 )
 
+CELERY_TASKS_TOTAL = Counter(
+    "mediqueue_celery_tasks_total",
+    "Total background Celery tasks dispatched",
+    ["task_name", "status"]
+)
+
+CELERY_TASK_DURATION = Histogram(
+    "mediqueue_celery_task_duration_seconds",
+    "Celery task execution duration in seconds",
+    ["task_name"]
+)
+
+
 _server_started = False
 
 

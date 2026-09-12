@@ -61,3 +61,6 @@ Thumbs.db
 data/server_logs.txt
 data/perf_results.json
 data/chat_history/
+data/summaries/
+data/notifications.log
+

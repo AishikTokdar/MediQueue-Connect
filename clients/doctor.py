@@ -114,7 +114,8 @@ def register_new_doctor_flow(preset_name: str | None = None) -> tuple[str, dict]
         print(f"Error registering doctor: {reg_res}")
         sys.exit(1)
 
-    print(f"\n✓ Doctor '{doctor_name}' registered successfully!")
+    print(f"\n[OK] Doctor '{doctor_name}' registered successfully!")
+
     return doctor_name, {
         "udp_port": udp_port,
         "specialization": specialization,
@@ -177,8 +178,9 @@ def main():
     sock.bind((HOST, udp_port))
 
     print(f"\n{'='*55}")
-    print(f"  Dr. {doctor_name}  –  {specialization}")
+    print(f"  Dr. {doctor_name}  -  {specialization}")
     print(f"  UDP port: {udp_port}")
+
     print(f"{'='*55}")
     print("  Waiting for patients...\n")
 
@@ -344,6 +346,25 @@ def _notify_server_end(doctor_name: str, session_id: str | None) -> None:
             "doctor": doctor_name,
             "session_id": session_id or "",
         })
+        try:
+            want_pdf = input("\n[DOCTOR PORTAL] Export a formatted PDF summary of this consultation? (yes/no): ").strip().lower()
+            if want_pdf in ("yes", "y"):
+                print("  Generating PDF transcript summary via Celery worker...")
+                res = send_tcp({
+                    "command": "GENERATE_TRANSCRIPT_PDF",
+                    "token": "DOCTOR_INTERNAL",
+                    "session_id": session_id,
+                    "doctor": doctor_name,
+                })
+                if res and res.get("status") == "OK":
+                    pdf_path = res.get("pdf_path", "data/summaries/")
+                    print(f"  [OK] PDF transcript summary exported to:\n    {pdf_path}")
+
+                else:
+                    print(f"  Notice: Could not generate PDF summary: {res}")
+        except Exception as e:
+            print(f"  Notice: Could not complete PDF export request: {e}")
+
 
 
 if __name__ == "__main__":

@@ -11,8 +11,11 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_HOST=redis
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
+      - rabbitmq
     restart: unless-stopped
 
   redis:
@@ -20,6 +23,27 @@ services:
     container_name: mediqueue_redis
     ports:
       - "6379:6379"
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mediqueue_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    container_name: mediqueue_celery_worker
+    command: celery -A server.celery_app worker --loglevel=info
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672//
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - rabbitmq
     restart: unless-stopped
 
   websocket_gateway:

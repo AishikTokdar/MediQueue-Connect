@@ -70,9 +70,10 @@ def render(data: dict, interval: float) -> None:
 
     out.append(CLEAR)
     out.append(ansi(CYAN + BOLD, "╔" + "═" * (W - 2) + "╗"))
-    out.append(ansi(CYAN + BOLD, f"║{'  🏥  HEALTHCARE SYSTEM DASHBOARD':^{W-2}}║"))
+    out.append(ansi(CYAN + BOLD, f"║{' HEALTHCARE SYSTEM DASHBOARD':^{W-2}}║"))
     out.append(ansi(CYAN + BOLD, f"║{f'  Updated: {now}  (every {interval}s)':^{W-2}}║"))
     out.append(ansi(CYAN + BOLD, "╚" + "═" * (W - 2) + "╝"))
+
 
     out.append("")
     out.append(ansi(BOLD, "  DOCTOR STATUS"))
@@ -135,7 +136,8 @@ def render_error(interval: float) -> None:
     now = datetime.now().strftime("%H:%M:%S")
     print(
         CLEAR +
-        ansi(RED + BOLD, f"\n  ⚠  Cannot reach Health Server ({HOST}:{PORT})\n") +
+        ansi(RED + BOLD, f"\n  [WARNING] Cannot reach Health Server ({HOST}:{PORT})\n") +
+
         f"  [{now}]  Retrying in {interval}s...\n" +
         ansi(DIM, "  Press Ctrl+C to exit."),
         flush=True

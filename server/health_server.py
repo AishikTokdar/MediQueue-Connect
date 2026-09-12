@@ -25,8 +25,17 @@ from metrics import (
     QUEUE_DEPTH,
     REQUEST_LATENCY,
     REQUESTS_TOTAL,
+    CELERY_TASKS_TOTAL,
     start_metrics_server,
 )
+from tasks import (
+    generate_session_summary_pdf_task,
+    generate_pdf_summary_internal,
+    send_email_reminder_task,
+    send_sms_reminder_task,
+)
+
+
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -218,7 +227,15 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             await _incr_stat("total_bookings")
             BOOKINGS_TOTAL.inc()
             log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}")
+            try:
+                send_email_reminder_task.delay(f"{user}@mediqueue.org", user, doctor, slot)
+                send_sms_reminder_task.delay("+15550192834", user, doctor, slot)
+                CELERY_TASKS_TOTAL.labels(task_name="send_email_reminder_task", status="ENQUEUED").inc()
+                CELERY_TASKS_TOTAL.labels(task_name="send_sms_reminder_task", status="ENQUEUED").inc()
+            except Exception as e:
+                log(f"Celery task dispatch notice: {e}", level="INFO")
         return resp
+
 
     elif cmd in ("MY_BOOKINGS", "GET_MY_APPOINTMENTS"):
         token = data.get("token", "")
@@ -318,6 +335,61 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             chat_hist.end_session(session_id)
         next_patient = queue_mgr.end_session(doctor)
         return {"status": "OK", "next_patient": next_patient[0] if isinstance(next_patient, tuple) else next_patient}
+
+    elif cmd == "GENERATE_TRANSCRIPT_PDF":
+        token = data.get("token")
+        session_id = data.get("session_id", "")
+        doctor = data.get("doctor", "")
+        patient = data.get("patient", "")
+        if not patient and token and auth.validate(token):
+            patient = auth.get_user(token)
+        if not patient:
+            patient = "patient"
+
+        try:
+            task = generate_session_summary_pdf_task.delay(session_id, doctor, patient)
+            CELERY_TASKS_TOTAL.labels(task_name="generate_session_summary_pdf_task", status="ENQUEUED").inc()
+            
+            # Check if task executed synchronously (eager mode)
+            result_info = None
+            if task.ready():
+                result_info = task.result
+
+            default_path = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "data", "summaries", doctor, f"{session_id}_summary.pdf")
+            )
+            pdf_path = (result_info.get("pdf_path") if isinstance(result_info, dict) else None) or default_path
+
+            return {
+                "status": "OK",
+                "task_id": str(task.id),
+                "pdf_path": pdf_path,
+                "message": f"PDF summary task queued successfully (Task ID: {task.id})",
+            }
+        except Exception as e:
+            log(f"Celery dispatch failed, executing synchronous fallback PDF generation: {e}", level="WARN")
+            res = generate_pdf_summary_internal(session_id, doctor, patient)
+            return {
+                "status": "OK",
+                "pdf_path": res.get("pdf_path"),
+                "message": "PDF summary generated directly.",
+            }
+
+
+    elif cmd == "GET_TASK_STATUS":
+        task_id = data.get("task_id", "")
+        try:
+            from celery.result import AsyncResult
+            res = AsyncResult(task_id)
+            return {
+                "status": "OK",
+                "task_id": task_id,
+                "state": res.state,
+                "result": res.result if res.ready() else None,
+            }
+        except Exception as e:
+            return {"status": "ERROR", "reason": str(e)}
+
 
     elif cmd == "DOCTOR_ONLINE":
         doctor = data.get("doctor", "")

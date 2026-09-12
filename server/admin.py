@@ -96,7 +96,8 @@ def remove_booking(bookings: dict) -> bool:
 
     res = tcp_send({"command": "ADMIN_REMOVE_BOOKING", "doctor": doctor_key, "slot": slot})
     if res and res.get("status") == "OK":
-        print(ansi(GREEN + BOLD, "✓ Booking removed successfully via Server"))
+        print(ansi(GREEN + BOLD, "[OK] Booking removed successfully via Server"))
+
         return True
     else:
         print(ansi(RED, f"Failed to remove booking: {res.get('reason', 'Unknown error')}"))
@@ -145,9 +146,10 @@ def list_chat_sessions() -> None:
                 session_id = sessions[idx][1].stem
                 res = tcp_send({"command": "ADMIN_KILL_SESSION", "session_id": session_id})
                 if res and res.get("status") == "OK":
-                    print(ansi(GREEN, f"✓ Triggered KILL_SESSION for {session_id}"))
+                    print(ansi(GREEN, f"[OK] Triggered KILL_SESSION for {session_id}"))
                 else:
-                    print(ansi(RED, "✗ Failed to kill session."))
+                    print(ansi(RED, "[FAILED] Failed to kill session."))
+
     elif choice.isdigit():
         idx = int(choice) - 1
         if 0 <= idx < len(sessions):
@@ -171,7 +173,7 @@ def view_session(path: Path) -> None:
 def manage_security() -> None:
     res = tcp_send({"command": "ADMIN_BANNED_IPS"})
     if not res or res.get("status") != "OK":
-        print(ansi(RED, "✗ Failed to fetch banned IPs."))
+        print(ansi(RED, "[FAILED] Failed to fetch banned IPs."))
         return
         
     banned_ips = res.get("banned_ips", [])
@@ -180,22 +182,27 @@ def manage_security() -> None:
         return
         
     print("\n" + ansi(RED + BOLD, "═" * 55))
-    print(ansi(RED + BOLD, "  BANNED IPs"))
+    print(ansi(RED + BOLD, "            BANNED IP ADDRESSES"))
     print(ansi(RED + BOLD, "═" * 55))
     for idx, ip in enumerate(banned_ips, 1):
         print(f"  [{idx}] {ip}")
     print(ansi(RED + BOLD, "═" * 55))
     
-    choice = input("Enter number to unban IP, or Enter to exit: ").strip()
-    if choice.isdigit():
-        idx = int(choice) - 1
+    unban_choice = input("\nEnter IP number or string to unban (or Enter to go back): ").strip()
+    if not unban_choice:
+        return
+
+    ip_to_unban = unban_choice
+    if unban_choice.isdigit():
+        idx = int(unban_choice) - 1
         if 0 <= idx < len(banned_ips):
             ip_to_unban = banned_ips[idx]
-            res = tcp_send({"command": "ADMIN_UNBAN_IP", "ip": ip_to_unban})
-            if res and res.get("status") == "OK":
-                print(ansi(GREEN, f"✓ IP {ip_to_unban} has been unbanned."))
-            else:
-                print(ansi(RED, f"✗ Failed to unban IP {ip_to_unban}."))
+
+    res_unban = tcp_send({"command": "ADMIN_UNBAN_IP", "ip": ip_to_unban})
+    if res_unban and res_unban.get("status") == "OK":
+        print(ansi(GREEN, f"[OK] IP {ip_to_unban} has been unbanned."))
+    else:
+        print(ansi(RED, f"[FAILED] Failed to unban IP {ip_to_unban}."))
 
 def display_menu() -> None:
     print("\n" + ansi(CYAN + BOLD, "═" * 55))
@@ -236,9 +243,10 @@ def main() -> None:
             if msg:
                 res = tcp_send({"command": "ADMIN_GLOBAL_MSG", "message": msg})
                 if res and res.get("status") == "OK":
-                    print(ansi(GREEN, "✓ Message broadcasted successfully!"))
+                    print(ansi(GREEN, "[OK] Message broadcasted successfully!"))
                 else:
-                    print(ansi(RED, "✗ Failed to broadcast message."))
+                    print(ansi(RED, "[FAILED] Failed to broadcast message."))
+
 
         elif choice == "5":
             manage_security()

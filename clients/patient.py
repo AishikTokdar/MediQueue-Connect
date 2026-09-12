@@ -130,13 +130,15 @@ def cancel_own_appointment(tcp: socket.socket, token: str) -> None:
     })
     res = tcp_recv(tcp)
     if res.get("status") == "OK":
-        print("✓ Appointment cancelled successfully.")
+        print("[OK] Appointment cancelled successfully.")
+
     else:
         print(f"Cancellation failed: {res.get('reason', 'Unknown error')}")
 
 
 def main():  # noqa: C901
-    banner("Healthcare System  –  Welcome")
+    banner("Healthcare System  -  Welcome")
+
 
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -203,7 +205,8 @@ def main():  # noqa: C901
 
     token = res["token"]
     insurance = res.get("insurance", [])
-    print(f"\n  Logged in as {username}  ✓   (token: {token[:8]}...)")
+    print(f"\n  Logged in as {username}  [OK]   (token: {token[:8]}...)")
+
     if insurance:
         print(f"  Insurance: {', '.join(insurance)}")
 
@@ -311,7 +314,8 @@ def main():  # noqa: C901
                 continue
 
             udp_port = res["udp_port"]
-            print(f"\n  ✓ Appointment booked with {doctor} at {slot}")
+            print(f"\n  [OK] Appointment booked with {doctor} at {slot}")
+
 
             if not yn("Do you want to chat with the doctor now? (yes/no): "):
                 continue
@@ -439,10 +443,10 @@ def main():  # noqa: C901
 
     if res["status"] == "TURN_READY":
         udp_port = res["udp_port"]
-        print(f"\n  ✓ Doctor is now available! Connecting...")
+        print(f"\n  [OK] Doctor is now available! Connecting...")
     elif res["status"] == "READY":
         udp_port = res["udp_port"]
-        print(f"\n  ✓ Doctor is free! Connecting...")
+        print(f"\n  [OK] Doctor is free! Connecting...")
     elif res["status"] != "READY":
         print(f"Chat request failed: {res}")
         tcp.close()
@@ -481,7 +485,7 @@ def main():  # noqa: C901
         enc_key = handshake["encrypted_key"]
         try:
             _session_key = decrypt_session_key(enc_key)
-            print(f"  🔒 Encrypted session established")
+            print(f"  [ENCRYPTED] Session established")
         except Exception as e:
             print(f"  [WARN] Key decryption failed: {e}. Using plaintext.")
     elif handshake["type"] == "READY":
@@ -507,9 +511,10 @@ def main():  # noqa: C901
 
     udp.settimeout(None)
 
-    enc_label = "🔒 Encrypted" if _session_key else "⚠ Plaintext"
+    enc_label = "[ENCRYPTED]" if _session_key else "[PLAINTEXT]"
     print(f"\n  {enc_label} chat with Dr. {doctor} started.")
     print("  Type 'exit' to end the session.\n")
+
 
     while True:
         try:
@@ -559,6 +564,27 @@ def _end_session(tcp: socket.socket, token: str, doctor: str, session_id: str) -
         tcp_recv(tcp)
     except Exception:
         pass
+
+    try:
+        want_pdf = input("\nDo you want to export a formatted PDF summary of this consultation? (yes/no): ").strip().lower()
+        if want_pdf in ("yes", "y"):
+            print("  Generating PDF transcript summary via background task queue...")
+            tcp_send(tcp, {
+                "command": "GENERATE_TRANSCRIPT_PDF",
+                "token": token,
+                "session_id": session_id,
+                "doctor": doctor,
+            })
+            res = tcp_recv(tcp)
+            if res.get("status") == "OK":
+                pdf_path = res.get("pdf_path", "data/summaries/")
+                print(f"  [OK] PDF transcript summary successfully exported to:\n    {pdf_path}")
+
+            else:
+                print(f"  Failed to generate PDF summary: {res.get('reason', 'Unknown error')}")
+    except Exception as e:
+        print(f"  Notice: Could not complete PDF export request: {e}")
+
 
 
 if __name__ == "__main__":

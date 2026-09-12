@@ -82,6 +82,17 @@ class AdminGlobalMsgPayload(BaseModel):
     message: str = Field(..., min_length=1)
 
 
+class GeneratePdfPayload(BaseModel):
+    token: Optional[str] = None
+    session_id: str = Field(..., min_length=1)
+    doctor: str = Field(..., min_length=1)
+    patient: Optional[str] = None
+
+
+class GetTaskStatusPayload(BaseModel):
+    task_id: str = Field(..., min_length=1)
+
+
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
     "REGISTER": RegisterPayload,
@@ -111,7 +122,10 @@ COMMAND_MODELS = {
     "ADMIN_KILL_SESSION": AdminKillSessionPayload,
     "ADMIN_UNBAN_IP": AdminUnbanIpPayload,
     "ADMIN_GLOBAL_MSG": AdminGlobalMsgPayload,
+    "GENERATE_TRANSCRIPT_PDF": GeneratePdfPayload,
+    "GET_TASK_STATUS": GetTaskStatusPayload,
 }
+
 
 
 def validate_request_payload(command: str, data: dict) -> Tuple[bool, Optional[str], Optional[dict]]:

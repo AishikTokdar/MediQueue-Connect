@@ -1,4 +1,4 @@
-# 🏥 MediQueue Connect
+# MediQueue Connect
 
 > **A Secure, Multi-Client Healthcare Consultation & Queue Management Platform built over TCP, UDP, and WebSockets.**
 
@@ -6,7 +6,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 ---
 
-## 📊 Quick Badges
+## Quick Badges
 
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform Support](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-success?style=for-the-badge&logo=linux&logoColor=white)
@@ -20,27 +20,27 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 ---
 
-## 📌 Table of Contents
+## Table of Contents
 
-1. [Overview](#-overview)
-2. [Resume Highlights & Impact Points](#-resume-highlights--impact-points)
-3. [System Architecture](#-system-architecture)
-4. [Core Computer Network & Backend Concepts Used](#-core-computer-network--backend-concepts-used)
-5. [File and Folder Structure](#-file-and-folder-structure)
-6. [Installation & Requirements](#-installation--requirements)
-7. [Pre-configured Accounts (For Testing)](#-pre-configured-accounts-for-testing)
-8. [Automated Test Suite](#-automated-test-suite)
-9. [Step-by-Step Run Guide](#-step-by-step-run-guide)
-10. [Feature Tour & Interactive Demos](#-feature-tour--interactive-demos)
-11. [Security Features & Controls](#-security-features--controls)
-12. [Troubleshooting & OS Compatibility Notes](#-troubleshooting--os-compatibility-notes)
-13. [Future Improvements](#-future-improvements)
-14. [Contributors](#-contributors)
-15. [License](#-license)
+1. [Overview](#overview)
+2. [Key Architectural Highlights](#key-architectural-highlights)
+3. [System Architecture](#system-architecture)
+4. [Core Computer Network & Backend Concepts Used](#core-computer-network--backend-concepts-used)
+5. [File and Folder Structure](#file-and-folder-structure)
+6. [Installation & Requirements](#installation--requirements)
+7. [Pre-configured Accounts (For Testing)](#pre-configured-accounts-for-testing)
+8. [Automated Test Suite](#automated-test-suite)
+9. [Step-by-Step Run Guide](#step-by-step-run-guide)
+10. [Feature Tour & Interactive Demos](#feature-tour--interactive-demos)
+11. [Security Features & Controls](#security-features--controls)
+12. [Troubleshooting & OS Compatibility Notes](#troubleshooting--os-compatibility-notes)
+13. [Future Improvements](#future-improvements)
+14. [Contributors](#contributors)
+15. [License](#license)
 
 ---
 
-## ✨ Overview
+## Overview
 
 MediQueue Connect bridges the gap between theoretical computer networking concepts and practical software engineering. Developed as part of the **Computer Communication and Networks (CCN/CN) curriculum**, this application leverages custom client-server application-layer protocols to orchestrate:
 
@@ -56,20 +56,21 @@ MediQueue Connect bridges the gap between theoretical computer networking concep
 
 ---
 
-## 💼 Resume Highlights & Impact Points
+## Key Architectural Highlights
 
-If you are showcasing this project on your resume or portfolio, here are tailored resume bullet points highlighting key backend achievements:
+The primary engineering milestones and technical design highlights built into MediQueue Connect include:
 
-- 🚀 **Redis In-Memory Caching & Session Management**: *"Implemented Redis session token storage with automatic TTL key expiration and write-through slot query caching, cutting database read latency by 75% under heavy traffic."*
-- 📊 **Prometheus & Operational Observability**: *"Instrumented Prometheus operational metrics exposing connection gauges, doctor queue depth metrics, and p95/p99 latency histograms for full system observability."*
-- 🌐 **WebSocket API Gateway Bridge**: *"Engineered a FastAPI WebSocket gateway bridging web clients to length-prefixed binary TCP backend socket servers."*
-- 🔐 **Zero-Trust Security & Input Validation**: *"Enforced Pydantic v2 input schema validation, salt-protected Argon2id password hashing, and token-bucket rate limiting to defend against packet flooding and injection attacks."*
-- ⚡ **Event-Driven Async Networking**: *"Architected an event-driven asyncio TCP socket server with 4-byte length-prefixed binary protocol framing to prevent TCP stream chunk fragmentation."*
-- 🐳 **Docker Multi-Container Orchestration**: *"Containerized the multi-service backend architecture using Docker and Docker Compose for single-command orchestration."*
+- **Event-Driven Async Networking Core**: Architected an event-driven `asyncio` TCP socket server operating with 4-byte big-endian binary protocol framing to prevent TCP stream chunk fragmentation.
+- **Distributed Asynchronous Task Queue (Celery & RabbitMQ)**: Integrated Celery task workers backed by RabbitMQ AMQP brokers to offload heavy transcript PDF summary rendering and statutory Email/SMS appointment reminders off the main socket thread loop.
+- **Redis In-Memory Session & Query Caching**: Implemented Redis session token storage with automatic TTL key expiration and write-through slot query caching to minimize database read latency under high traffic.
+- **Zero-Trust Security & Input Validation**: Enforced Pydantic v2 input schema validation, salt-protected Argon2id password hashing, and token-bucket rate limiting to defend against packet flooding and injection attacks.
+- **Prometheus Operational Telemetry**: Instrumented Prometheus operational metrics exposing connection gauges, doctor queue depth metrics, and p95/p99 request latency histograms for operational observability.
+- **WebSocket API Gateway Bridge**: Engineered a FastAPI / Uvicorn WebSocket gateway bridging browser WebSockets (`ws://`) to 4-byte length-prefixed binary TCP backend socket servers.
+- **Docker Multi-Container Orchestration**: Containerized the multi-service backend architecture using Docker and Docker Compose for single-command orchestration across Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 The following diagram illustrates how the core components communicate using TCP, UDP, WebSockets, local SQLite datastores, Redis cache, Prometheus telemetry, and the publish-subscribe model:
 
@@ -140,7 +141,7 @@ graph TD
 
 ---
 
-## 🧠 Core Computer Network & Backend Concepts Used
+## Core Computer Network & Backend Concepts Used
 
 MediQueue Connect is a sandbox for demonstrating several primary networking and backend engineering paradigms:
 
@@ -165,18 +166,18 @@ MediQueue Connect is a sandbox for demonstrating several primary networking and 
 9. **Prometheus Operational Telemetry**:
    - Real-time operational metrics are exposed via HTTP `/metrics` on port `8000` (`metrics.py`), including request counters, active connection gauges, queue depth stats, and p95/p99 latency histograms.
 10. **Docker Compose Multi-Container Orchestration**:
-    - Containerized using `Dockerfile` and `docker-compose.yml` orchestrating the Health Server, Redis cache, WebSocket Gateway, and Prometheus exporter.
+    - Containerized using `Dockerfile` and `docker-compose.yml` orchestrating Health Server, Redis cache, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 MediQueue-Connect/
 │
-├── requirements.txt            # Package dependencies (cryptography, pydantic, argon2-cffi, pytest, redis, prometheus-client, fastapi, uvicorn, websockets)
+├── requirements.txt            # Package dependencies (cryptography, pydantic, argon2-cffi, pytest, redis, prometheus-client, fastapi, uvicorn, websockets, celery, kombu, reportlab)
 ├── Dockerfile                  # Multi-stage Docker build file
-├── docker-compose.yml          # Docker Compose orchestration (Health Server, Redis, WebSocket Gateway)
+├── docker-compose.yml          # Docker Compose orchestration (Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway)
 ├── run_demo.bat                # Windows automated launcher script (--test flag supported)
 ├── run_demo.sh                 # Linux/macOS automated launcher script (--test flag supported)
 ├── LICENSE                     # GPLv3 License
@@ -188,6 +189,9 @@ MediQueue-Connect/
 │
 ├── server/
 │   ├── health_server.py        # Central Asyncio TCP socket server & dispatcher
+│   ├── celery_app.py           # Celery application configuration & RabbitMQ broker setup
+│   ├── tasks.py                # Background Celery task routines (PDF exporter, Email/SMS notifications)
+│   ├── pdf_generator.py        # ReportLab medical transcript PDF summary builder
 │   ├── db.py                   # Transactional SQLite manager (WAL mode) & JSON seed engine
 │   ├── cache.py                # Redis session & slot query cache manager with in-memory fallback
 │   ├── metrics.py              # Prometheus metrics counters, gauges, histograms & HTTP exporter
@@ -209,24 +213,24 @@ MediQueue-Connect/
 │   ├── test_cache.py           # Unit tests for Redis session caching and query invalidation
 │   ├── test_metrics.py         # Unit tests for Prometheus counter and gauge metrics
 │   ├── test_protocol.py        # Unit tests for length-prefixed framing and fallback handling
+│   ├── test_tasks.py           # Unit tests for Celery tasks and PDF summary exporter
 │   └── test_server_integration.py # Async integration tests for full server lifecycle
 │
 └── data/
     ├── mediqueue.db            # SQLite database (ACID storage for users, doctors, bookings, audit logs)
     ├── server_logs.txt         # Server runtime event log
+    ├── notifications.log       # Audit log for background Email/SMS notification dispatches
     ├── chat_history/           # Folder containing audit trails for patient-doctor conversations
-    ├── doctors.json            # Legacy seed file for doctors
-    ├── users.json              # Legacy seed file for users
-    └── bookings.json           # Legacy seed file for bookings
+    └── summaries/              # Formatted PDF consultation summary exports
 ```
 
 ---
 
-## ⚡ Installation & Requirements
+## Installation & Requirements
 
 ### Dependencies
 - **Python**: Version 3.10 or higher.
-- **Packages**: `cryptography`, `pydantic`, `argon2-cffi`, `pytest`, `redis`, `prometheus-client`, `fastapi`, `uvicorn`, `websockets`.
+- **Packages**: `cryptography`, `pydantic`, `argon2-cffi`, `pytest`, `redis`, `prometheus-client`, `fastapi`, `uvicorn`, `websockets`, `celery`, `kombu`, `reportlab`.
 
 ### 1) Clone and Prepare Environment
 
@@ -254,7 +258,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🔑 Pre-configured Accounts & Doctor Specializations (For Testing)
+## Pre-configured Accounts & Doctor Specializations (For Testing)
 
 ### Patient Accounts
 To log in immediately, use any of the pre-configured patients. The default password is identical to the username:
@@ -295,7 +299,7 @@ Doctors are categorized into specific specializations and accept different insur
 
 ---
 
-## 🧪 Automated Test Suite
+## Automated Test Suite
 
 To run the automated `pytest` test suite:
 
@@ -306,30 +310,33 @@ python -m pytest -v tests/
 *Expected Output:*
 ```text
 ============================= test session starts =============================
-collected 9 items
+collected 12 items
 
-tests/test_cache.py::test_cache_manager_session PASSED                   [ 11%]
-tests/test_cache.py::test_cache_manager_slots PASSED                     [ 22%]
-tests/test_db.py::test_auth_manager_register_and_login PASSED            [ 33%]
-tests/test_db.py::test_scheduler_doctor_and_booking PASSED               [ 44%]
-tests/test_db.py::test_audit_logs PASSED                                 [ 55%]
-tests/test_metrics.py::test_prometheus_metrics PASSED                    [ 66%]
-tests/test_protocol.py::test_framed_protocol_pack_unpack PASSED          [ 77%]
-tests/test_protocol.py::test_framed_protocol_legacy_fallback PASSED      [ 88%]
-tests/test_server_integration.py::test_full_server_async_request_flow PASSED [100%]
+tests/test_cache.py::test_cache_manager_session PASSED                   [  8%]
+tests/test_cache.py::test_cache_manager_slots PASSED                     [ 16%]
+tests/test_db.py::test_auth_manager_register_and_login PASSED            [ 25%]
+tests/test_db.py::test_scheduler_doctor_and_booking PASSED               [ 33%]
+tests/test_db.py::test_audit_logs PASSED                                 [ 41%]
+tests/test_metrics.py::test_prometheus_metrics PASSED                    [ 50%]
+tests/test_protocol.py::test_framed_protocol_pack_unpack PASSED          [ 58%]
+tests/test_protocol.py::test_framed_protocol_legacy_fallback PASSED      [ 66%]
+tests/test_server_integration.py::test_full_server_async_request_flow PASSED [ 75%]
+tests/test_tasks.py::test_pdf_generator_directly PASSED                  [ 83%]
+tests/test_tasks.py::test_generate_session_summary_pdf_task PASSED       [ 91%]
+tests/test_tasks.py::test_email_and_sms_reminder_tasks PASSED             [100%]
 
-============================= 9 passed in 0.65s ==============================
+============================= 12 passed in 0.81s ==============================
 ```
 
 ---
 
-## ⚡ Step-by-Step Run Guide
+## Step-by-Step Run Guide
 
 You can run MediQueue Connect either using the **Automated Launcher Scripts** (one-click startup for all components), **Manually Step-by-Step**, or via **Docker Compose Containers**.
 
 ---
 
-### 🚀 Option A: Automated One-Click Launcher (Recommended)
+### Option A: Automated One-Click Launcher (Recommended)
 
 Automated scripts spawn the Health Server, Doctor processes, and Dashboard in separate background windows, leaving your primary terminal ready for Patient interaction:
 
@@ -353,7 +360,7 @@ run_demo.bat
 
 ---
 
-### 🛠️ Option B: Manual Step-by-Step Execution
+### Option B: Manual Step-by-Step Execution
 
 If you prefer launching each component manually across separate terminal windows:
 
@@ -362,31 +369,17 @@ Open **Terminal 1** and start the central TLS control server:
 ```bash
 python server/health_server.py
 ```
-*Expected Console Output:*
-```text
-[2026-08-25T14:40:00.000] [INFO] Prometheus operational telemetry exporter started on http://127.0.0.1:8000/metrics
-[2026-08-25T14:40:00.005] [INFO] TLS SSLContext initialized for server
-[2026-08-25T14:40:00.010] [INFO] Health Server running on 127.0.0.1:4000 (Asyncio Core)
-```
 
 #### Step 2: Launch WebSocket Gateway Bridge (Optional for Web Clients)
 Open **Terminal 2**:
 ```bash
 python server/websocket_gateway.py
 ```
-*Expected Console Output:*
-```text
-INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
-```
 
 #### Step 3: Launch Doctor Clients
 Open **Terminal 3** (and optionally **Terminal 4**) to set doctors online or register new doctor profiles:
 ```bash
-# Launch pre-configured doctor profile (Terminal 3)
 python clients/doctor.py doctor1
-
-# Launch via interactive startup menu to select profile or register new doctor (Terminal 4)
-python clients/doctor.py
 ```
 
 #### Step 4: Launch Patient Clients
@@ -394,11 +387,6 @@ Open **Terminal 5** to initiate appointment bookings or live consultations:
 ```bash
 python clients/patient.py
 ```
-*In the patient CLI:*
-1. Select **1. Login** or **2. Register**.
-2. Log in using `patient1` (password: `patient1`).
-3. Select **1. Book appointment** or **2. Request immediate consultation**.
-4. Filter by doctor specialization (e.g. *General Physician*, *Cardiologist*) to view doctors matching your insurance coverage.
 
 #### Step 5: Launch the Live Dashboard (Optional)
 Open **Terminal 6** to view real-time system metrics, doctor availability, queue positions, and server logs:
@@ -407,22 +395,22 @@ python server/dashboard.py --interval 2
 ```
 
 #### Step 6: Launch the Admin Console (Optional)
-Open **Terminal 7** to execute administrative commands (e.g. broadcast system alerts, terminate sessions, unban rate-limited IPs):
+Open **Terminal 7** to execute administrative commands:
 ```bash
 python server/admin.py
 ```
 
 #### Step 7: Run Network Performance Analysis (Optional)
-Open **Terminal 8** to benchmark TCP vs UDP latency under customizable round-trip counts and payload sizes:
+Open **Terminal 8** to benchmark TCP vs UDP latency under customizable round-trip counts:
 ```bash
 python server/performance_analysis.py --rounds 50 --payload 128
 ```
 
 ---
 
-### 🐳 Option C: Docker Compose Method
+### Option C: Docker Compose Method
 
-To spin up the entire multi-service containerized stack (Health Server, Redis cache, WebSocket Gateway, Prometheus exporter) with a single command:
+To spin up the entire multi-service containerized stack (Health Server, Redis cache, RabbitMQ, Celery Worker, WebSocket Gateway, Prometheus exporter) with a single command:
 
 ```bash
 docker compose up --build -d
@@ -430,7 +418,7 @@ docker compose up --build -d
 
 ---
 
-## 🛠️ Feature Tour & Interactive Demos
+## Feature Tour & Interactive Demos
 
 ### 1. Booking a Slot & Patient Scheduling
 1. Run `patient.py` and log in as `patient1` (password: `patient1`).
@@ -455,10 +443,10 @@ If a doctor is already consulting a patient, other incoming patients are placed 
   - Upon starting a UDP session, the doctor client generates an ephemeral Fernet key.
   - The doctor client encrypts this session key using a shared secret passphrase (`blue-scrubs-and-cold-coffee-2026`) and sends it to the patient.
   - The patient client decrypts the session key. All subsequent conversation messages (`type: CHAT`) are sent as ciphertext.
-  - The Patient terminal displays a `🔒 Encrypted chat with Dr. <name> started` banner.
+  - The Patient terminal displays an `Encrypted chat with Dr. <name> started` banner.
 - **If `cryptography` is NOT installed**:
   - The handshake falls back to plaintext.
-  - Sockets transmit raw text, and the patient terminal displays a `⚠ Plaintext chat with Dr. <name> started` warning.
+  - Sockets transmit raw text, and the patient terminal displays a `Plaintext chat with Dr. <name> started` warning.
 
 ### 4. Doctor-to-Doctor Invite Feature (Collaboration)
 While engaged in a live chat, doctors can invite offline/online colleagues for a joint consultation:
@@ -477,7 +465,7 @@ Using `admin.py`:
 
 ---
 
-## 🔒 Security Features & Controls
+## Security Features & Controls
 
 MediQueue Connect includes production security features suited for local socket networks and distributed microservices:
 
@@ -496,58 +484,58 @@ MediQueue Connect includes production security features suited for local socket 
 
 ---
 
-## 🩺 Troubleshooting & OS Compatibility Notes
+## Troubleshooting & OS Compatibility Notes
 
-### ⚠️ Windows Console Colors
+### Windows Console Colors
 If ANSI escape sequences (like `\033[91m`) appear as raw characters in Windows Command Prompt, run the script once to enable virtual terminal processing, or use Windows Terminal (PowerShell).
 
-### ⚠️ UDP Port Conflicts
+### UDP Port Conflicts
 Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ranging from `5001` to `5016`). If you receive a socket bind error, verify that no other process is using those ports:
 - On Windows: `netstat -ano | findstr <port>`
 - On Linux: `sudo lsof -i :<port>`
 
 ---
 
-## 🚀 Future Improvements & Production Status
+## Future Improvements & Production Status
 
 To transition MediQueue Connect from an educational simulation to a production-grade application, several architectural improvements have been implemented, with future microservice roadmap items planned:
 
-### 🛠️ Implemented Architectural Features (Completed ✓)
+### Implemented Architectural Features (Completed)
 
-1. **Cross-Platform Queue Management** *(Implemented ✓)*:
+1. **Cross-Platform Queue Management** *(Implemented)*:
    Implemented a unified non-blocking input layer (`check_cancel_key`) in `clients/patient.py`. Windows uses `msvcrt`, while Linux and macOS use `select.select` with POSIX `termios` cbreak mode for queue cancellation without blocking the thread.
-2. **TLS/SSL for TCP Socket Communication** *(Implemented ✓)*:
-   Wrapped the main TCP control listener (`health_server.py`) and all client applications (`patient.py`, `doctor.py`, `admin.py`, `dashboard.py`, `performance_analysis.py`) using Python's `ssl` module. The system automatically generates RSA-2048 self-signed TLS certificates stored in `data/certs/`, securing all control plane operations (credentials, tokens, bookings, administrative commands) against eavesdropping.
-3. **Dynamic Doctor Registration** *(Implemented ✓)*:
-   Implemented full dynamic doctor registration protocol (`REGISTER_DOCTOR` command). Doctors can launch `clients/doctor.py` without hardcoded configuration files, specify their specialization (*General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician* or custom), choose accepted insurance policies (*insuranceA*, *insuranceB*, or both), and assign listening UDP ports dynamically at boot time.
-4. **Persistent Database Integration (SQLite WAL)** *(Implemented ✓)*:
-   Replaced local JSON storage (`users.json`, `bookings.json`) with an ACID-compliant SQLite database (`mediqueue.db`) operating in Write-Ahead Logging (`WAL`) mode with foreign key constraints.
-5. **Length-Prefixed Binary Protocol Framing** *(Implemented ✓)*:
+2. **TLS/SSL for TCP Socket Communication** *(Implemented)*:
+   Wrapped the main TCP control listener (`health_server.py`) and all client applications (`patient.py`, `doctor.py`, `admin.py`, `dashboard.py`, `performance_analysis.py`) using Python's `ssl` module. The system automatically generates RSA-2048 self-signed TLS certificates stored in `data/certs/`, securing all control plane operations against eavesdropping.
+3. **Dynamic Doctor Registration** *(Implemented)*:
+   Implemented full dynamic doctor registration protocol (`REGISTER_DOCTOR` command). Doctors can launch `clients/doctor.py` without hardcoded configuration files, specify their specialization, choose accepted insurance policies, and assign listening UDP ports dynamically at boot time.
+4. **Persistent Database Integration (SQLite WAL)** *(Implemented)*:
+   Replaced local JSON storage with an ACID-compliant SQLite database (`mediqueue.db`) operating in Write-Ahead Logging (`WAL`) mode with foreign key constraints.
+5. **Length-Prefixed Binary Protocol Framing** *(Implemented)*:
    Implemented a 4-byte big-endian length-prefixed binary framing protocol (`protocol.py`) preventing TCP packet fragmentation and buffer boundary errors across network chunks.
-6. **Argon2id Auth & Pydantic Schema Validation** *(Implemented ✓)*:
+6. **Argon2id Auth & Pydantic Schema Validation** *(Implemented)*:
    Enforced Pydantic v2 input validation schemas and salt-protected Argon2id password hashing (`argon2-cffi`).
-7. **Redis Session & Slot Query Caching** *(Implemented ✓)*:
+7. **Redis Session & Slot Query Caching** *(Implemented)*:
    Integrated Redis session token storage (`session:<token>`) with auto-TTL expiration and write-through slot query caching with automatic in-memory fallback.
-8. **Prometheus Operational Telemetry Exporter** *(Implemented ✓)*:
+8. **Prometheus Operational Telemetry Exporter** *(Implemented)*:
    Exposed HTTP `/metrics` endpoint on port `8000` tracking request counters, active connection gauges, queue depth metrics, and latency histograms.
-9. **WebSocket API Gateway Bridge** *(Implemented ✓)*:
+9. **WebSocket API Gateway Bridge** *(Implemented)*:
    Engineered a FastAPI / Uvicorn WebSocket bridge (`ws://127.0.0.1:8080/ws`) translating browser WebSocket JSON frames into 4-byte length-prefixed binary TCP packets.
-10. **Docker Multi-Container Orchestration** *(Implemented ✓)*:
-    Containerized Health Server, Redis, WebSocket Gateway, and Prometheus exporter using `Dockerfile` and `docker-compose.yml`.
+10. **Docker Multi-Container Orchestration** *(Implemented)*:
+    Containerized Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter using `Dockerfile` and `docker-compose.yml`.
+11. **Distributed Asynchronous Task Queue (Celery / RabbitMQ) & PDF Consultation Exporter** *(Implemented)*:
+    Integrated Celery background task workers (`server/celery_app.py`, `server/tasks.py`) and RabbitMQ AMQP brokers to offload heavy background operations (clinical consultation transcript PDF summary generation via ReportLab, email/SMS appointment reminders) off the main asyncio TCP/WebSocket server loop. When ending a consultation, terminal clients (`patient.py`, `doctor.py`) prompt users to export a formatted PDF summary saved under `data/summaries/<doctor>/<session_id>_summary.pdf`.
+    *(Note: Email and SMS reminder notifications are statutory/mock dispatches implemented for demonstration purposes to showcase background task queue offloading and audit logging without requiring external paid gateway credentials).*
 
-### 🔮 Planned Architectural Roadmap (Future)
+### Planned Architectural Roadmap (Future)
 
 1. **True Diffie-Hellman Key Exchange (DHKE)**:
    Implement an actual Diffie-Hellman or Elliptic Curve Diffie-Hellman (ECDH) key exchange protocol at the start of UDP sessions. This would allow patients and doctors to generate a shared session key without relying on a hardcoded passphrase (`blue-scrubs-and-cold-coffee-2026`).
-2. **Distributed Asynchronous Task Queue (Celery / RabbitMQ)**:
-   Offloading heavy background tasks (session transcript PDF summary generation, email/SMS reminders) off the main socket loop to Celery workers and RabbitMQ AMQP brokers.
-3. **Real-time Audio/Video Streaming (RTP/RTCP)**:
+2. **Real-time Audio/Video Streaming (RTP/RTCP)**:
    Extend the consultation layer to support voice and video by packetizing microphone/camera streams and transmitting them over UDP, managed by a session signaling protocol.
-
 
 ---
 
-## 🙌 Contributors
+## Contributors
 
 - [Aishik Tokdar](https://github.com/AishikTokdar)
 - [Shataghnee Chatterjee](https://github.com/shataghnee05)
@@ -555,6 +543,6 @@ To transition MediQueue Connect from an educational simulation to a production-g
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the `LICENSE` file for details.
