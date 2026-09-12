@@ -199,23 +199,19 @@ def main():
         try:
             sub = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sub.connect((HOST, SERVER_PORT))
-            sub.sendall((json.dumps({"command": "SUBSCRIBE", "token": "DOCTOR_INTERNAL"}) + "\n").encode())
-            data = b""
+            sub = wrap_client_socket(sub, server_hostname=HOST)
+            send_framed(sub, {"command": "SUBSCRIBE", "token": "DOCTOR_INTERNAL"})
             while True:
-                chunk = sub.recv(8192)
-                if not chunk: break
-                data += chunk
-                while b"\n" in data:
-                    line, data = data.split(b"\n", 1)
-                    if line:
-                        msg = json.loads(line.decode())
-                        if msg.get("status") == "GLOBAL_MSG":
-                            print(f"\n\033[1m\033[93m[SERVER BROADCAST] {msg.get('message')}\033[0m", flush=True)
-                        elif msg.get("status") == "KILL_SESSION":
-                            if _current_session_id and msg.get("session_id") == _current_session_id:
-                                print("\n\033[1m\033[91m[SERVER] FORCE TERMINATED SESSION\033[0m", flush=True)
-                                _notify_server_end(doctor_name, _current_session_id)
-                                os._exit(0)
+                msg = recv_framed(sub)
+                if not msg:
+                    break
+                if msg.get("status") == "GLOBAL_MSG":
+                    print(f"\n\033[1m\033[93m[SERVER BROADCAST] {msg.get('message')}\033[0m", flush=True)
+                elif msg.get("status") == "KILL_SESSION":
+                    if _current_session_id and msg.get("session_id") == _current_session_id:
+                        print("\n\033[1m\033[91m[SERVER] FORCE TERMINATED SESSION\033[0m", flush=True)
+                        _notify_server_end(doctor_name, _current_session_id)
+                        os._exit(0)
         except Exception:
             print("\nHealth Server stopped (push connection lost)", flush=True)
             os._exit(1)

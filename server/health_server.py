@@ -181,7 +181,8 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             auth.create_session(token, username)
             await _incr_stat("total_logins")
             log_audit("USER_LOGIN", user=username, trace_id=trace_id, details=f"IP: {client_ip}")
-            return {"status": "OK", "token": token, "username": username}
+            insurance = auth.get_insurance(token)
+            return {"status": "OK", "token": token, "username": username, "insurance": insurance}
         else:
             log("Login failed", level="WARN", trace_id=trace_id, client_ip=client_ip)
             return {"status": "FAIL", "reason": "Invalid credentials"}
@@ -205,7 +206,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         slots = scheduler.get_slots(user_insurance, specialization)
         return {"status": "OK", "doctors": slots}
 
-    elif cmd == "BOOK":
+    elif cmd in ("BOOK", "BOOK_SLOT"):
         token = data.get("token", "")
         if not auth.validate(token):
             return {"status": "ERROR", "reason": "Invalid token"}
@@ -219,15 +220,15 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}")
         return resp
 
-    elif cmd == "MY_BOOKINGS":
+    elif cmd in ("MY_BOOKINGS", "GET_MY_APPOINTMENTS"):
         token = data.get("token", "")
         if not auth.validate(token):
             return {"status": "ERROR", "reason": "Invalid token"}
         user = auth.get_user(token)
         bookings = scheduler.get_bookings_for_patient(user)
-        return {"status": "OK", "bookings": bookings}
+        return {"status": "OK", "bookings": bookings, "appointments": bookings}
 
-    elif cmd == "CANCEL_BOOKING":
+    elif cmd in ("CANCEL_BOOKING", "CANCEL_MY_BOOKING"):
         token = data.get("token", "")
         if not auth.validate(token):
             return {"status": "ERROR", "reason": "Invalid token"}
@@ -235,6 +236,49 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         doctor = data.get("doctor", "")
         slot = data.get("slot", "")
         return scheduler.remove_booking_for_patient(user, doctor, slot)
+
+    elif cmd == "GET_DOCTORS":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user_insurance = auth.get_insurance(token)
+        specialization = data.get("specialization")
+        all_docs = scheduler.get_all_doctors()
+        filtered = {}
+        for d_name, d_info in all_docs.items():
+            acc_ins = d_info.get("accepted_insurance", [])
+            spec = d_info.get("specialization", "")
+            if user_insurance and not any(i in acc_ins for i in user_insurance):
+                continue
+            if specialization and specialization.lower() not in spec.lower():
+                continue
+            filtered[d_name] = {
+                "online": queue_mgr.is_online(d_name),
+                "specialization": spec,
+                "accepted_insurance": acc_ins,
+                "udp_port": d_info.get("udp_port", 5000),
+            }
+        return {"status": "OK", "doctors": filtered}
+
+    elif cmd == "REQUEST_CHAT":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        all_docs = scheduler.get_all_doctors()
+        doc_info = all_docs.get(doctor, {})
+        udp_port = doc_info.get("udp_port", 5000)
+
+        if not queue_mgr.is_busy(doctor):
+            if queue_mgr.try_start_session(doctor, user):
+                log_audit("START_CONSULTATION", user=user, trace_id=trace_id, details=f"Doctor: {doctor}")
+                return {"status": "READY", "udp_port": udp_port}
+
+        pos = queue_mgr.enqueue(doctor, user)
+        QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
+        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
+        return {"status": "QUEUED", "position": pos, "doctor": doctor, "udp_port": udp_port}
 
     elif cmd == "JOIN_QUEUE":
         token = data.get("token", "")
@@ -247,7 +291,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
         return {"status": "QUEUED", "position": pos, "doctor": doctor}
 
-    elif cmd == "LEAVE_QUEUE":
+    elif cmd in ("LEAVE_QUEUE", "CANCEL_QUEUE"):
         token = data.get("token", "")
         if not auth.validate(token):
             return {"status": "ERROR", "reason": "Invalid token"}
@@ -256,6 +300,36 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         success = queue_mgr.dequeue_patient(doctor, user)
         QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
         return {"status": "OK" if success else "FAIL"}
+
+    elif cmd == "START_CHAT":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        session_id = data.get("session_id", str(uuid.uuid4()))
+        chat_hist.start_session(session_id, doctor, user)
+        return {"status": "OK"}
+
+    elif cmd == "END_SESSION":
+        doctor = data.get("doctor", "")
+        session_id = data.get("session_id", "")
+        if session_id:
+            chat_hist.end_session(session_id)
+        next_patient = queue_mgr.end_session(doctor)
+        return {"status": "OK", "next_patient": next_patient[0] if isinstance(next_patient, tuple) else next_patient}
+
+    elif cmd == "DOCTOR_ONLINE":
+        doctor = data.get("doctor", "")
+        queue_mgr.set_online(doctor, True)
+        log(f"Doctor {doctor} is now ONLINE", level="INFO", trace_id=trace_id)
+        return {"status": "OK"}
+
+    elif cmd == "DOCTOR_OFFLINE":
+        doctor = data.get("doctor", "")
+        queue_mgr.set_online(doctor, False)
+        log(f"Doctor {doctor} is now OFFLINE", level="INFO", trace_id=trace_id)
+        return {"status": "OK"}
 
     elif cmd == "NEXT_PATIENT":
         token = data.get("token", "")
@@ -286,30 +360,50 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         banned = await rate_limiter.get_banned_ips()
         async with _stats_lock:
             st = dict(_stats)
-        st["uptime_seconds"] = int(time.time() - _start_time)
+        uptime = int(time.time() - _start_time)
+        st["uptime"] = uptime
+        st["uptime_seconds"] = uptime
         st["banned_ips"] = banned
         st["all_bookings"] = scheduler.get_all_bookings()
         st["all_queues"] = queue_mgr.get_all_queues()
+        st["queue_state"] = queue_mgr.snapshot()
         st["doctors"] = scheduler.get_all_doctors()
-        return {"status": "OK", "stats": st}
+        return {"status": "OK", "stats": st, "queue_state": st["queue_state"], "banned_ips": banned}
 
-    elif cmd == "SUBSCRIBE_STATS":
+    elif cmd in ("SUBSCRIBE", "SUBSCRIBE_STATS"):
         async with _active_subs_lock:
             if writer not in _active_subs:
                 _active_subs.append(writer)
         return {"status": "SUBSCRIBED"}
 
-    elif cmd == "UNBAN_IP":
+    elif cmd == "ADMIN_GET_BOOKINGS":
+        return {"status": "OK", "bookings": scheduler.get_all_bookings()}
+
+    elif cmd in ("CLEAR_BOOKING", "ADMIN_REMOVE_BOOKING"):
+        doctor = data.get("doctor", "")
+        slot = data.get("slot", "")
+        success = scheduler.remove_booking(doctor, slot)
+        return {"status": "OK" if success else "FAIL"}
+
+    elif cmd == "ADMIN_KILL_SESSION":
+        session_id = data.get("session_id", "")
+        await _broadcast_to_subs({"status": "KILL_SESSION", "session_id": session_id})
+        return {"status": "OK"}
+
+    elif cmd == "ADMIN_BANNED_IPS":
+        banned = await rate_limiter.get_banned_ips()
+        return {"status": "OK", "banned_ips": banned}
+
+    elif cmd in ("UNBAN_IP", "ADMIN_UNBAN_IP"):
         ip = data.get("ip", "")
         unbanned = await rate_limiter.unban(ip)
         log_audit("UNBAN_IP", user="ADMIN", trace_id=trace_id, details=f"IP: {ip}")
         return {"status": "OK" if unbanned else "FAIL"}
 
-    elif cmd == "CLEAR_BOOKING":
-        doctor = data.get("doctor", "")
-        slot = data.get("slot", "")
-        success = scheduler.remove_booking(doctor, slot)
-        return {"status": "OK" if success else "FAIL"}
+    elif cmd == "ADMIN_GLOBAL_MSG":
+        msg = data.get("message", "")
+        await _broadcast_to_subs({"status": "GLOBAL_MSG", "message": msg})
+        return {"status": "OK"}
 
     elif cmd == "AUDIT_LOGS":
         token = data.get("token", "")

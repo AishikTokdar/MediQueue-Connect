@@ -49,7 +49,7 @@ class QueueManager:
             log(f"[QUEUE] Session STARTED: {username} <-> {doctor}")
             return True
 
-    def enqueue(self, doctor: str, username: str, conn) -> int:
+    def enqueue(self, doctor: str, username: str, conn=None) -> int:
         with self._lock:
             self._ensure_doctor(doctor)
             self._queues[doctor].append((username, conn))
@@ -57,6 +57,32 @@ class QueueManager:
             pos = self._position_cache[(doctor, username)]
             log(f"[QUEUE] {username} waiting for {doctor} at position {pos}")
             return pos
+
+    def get_queue(self, doctor: str) -> list[str]:
+        with self._lock:
+            self._ensure_doctor(doctor)
+            return [u for u, _ in self._queues[doctor]]
+
+    def get_all_queues(self) -> dict[str, list[str]]:
+        with self._lock:
+            return {doc: [u for u, _ in q] for doc, q in self._queues.items()}
+
+    def dequeue_patient(self, doctor: str, username: str) -> bool:
+        with self._lock:
+            self._ensure_doctor(doctor)
+            initial_len = len(self._queues[doctor])
+            self._queues[doctor] = collections.deque(
+                (u, c) for u, c in self._queues[doctor] if u != username
+            )
+            self._position_cache.pop((doctor, username), None)
+            self._recompute_positions(doctor)
+            return len(self._queues[doctor]) < initial_len
+
+    def dequeue_next(self, doctor: str) -> str | None:
+        next_item = self.end_session(doctor)
+        if next_item:
+            return next_item[0] if isinstance(next_item, tuple) else next_item
+        return None
 
     def end_session(self, doctor: str) -> tuple | None:
         with self._lock:
@@ -77,13 +103,7 @@ class QueueManager:
             return None
 
     def remove_from_queue(self, doctor: str, username: str) -> None:
-        with self._lock:
-            self._ensure_doctor(doctor)
-            self._queues[doctor] = collections.deque(
-                (u, c) for u, c in self._queues[doctor] if u != username
-            )
-            self._position_cache.pop((doctor, username), None)
-            self._recompute_positions(doctor)
+        self.dequeue_patient(doctor, username)
 
     def queue_position(self, doctor: str, username: str) -> int:
         with self._lock:
@@ -105,3 +125,4 @@ class QueueManager:
                 }
                 for doc in set(list(self._busy.keys()) + list(self._queues.keys())) | self._online_doctors
             }
+

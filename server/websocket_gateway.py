@@ -48,35 +48,42 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
             return
 
-    try:
-        while True:
-            data_str = await websocket.receive_text()
-            try:
-                payload = json.loads(data_str)
-            except Exception:
-                await websocket.send_json({"status": "ERROR", "reason": "Invalid JSON format"})
-                continue
-
-            # Forward frame to TCP Health Server
-            await async_send_framed(writer, payload)
-
-            # Read framed response from TCP Health Server
-            response = await async_recv_framed(reader)
-            if response is None:
-                await websocket.send_json({"status": "ERROR", "reason": "Health Server disconnected"})
-                break
-
-            # Return response frame to WebSocket client
-            await websocket.send_json(response)
-
-    except WebSocketDisconnect:
-        pass
-    finally:
-        writer.close()
+    async def ws_to_tcp():
         try:
-            await writer.wait_closed()
+            while True:
+                data_str = await websocket.receive_text()
+                try:
+                    payload = json.loads(data_str)
+                except Exception:
+                    await websocket.send_json({"status": "ERROR", "reason": "Invalid JSON format"})
+                    continue
+                await async_send_framed(writer, payload)
+        except WebSocketDisconnect:
+            pass
         except Exception:
             pass
+
+    async def tcp_to_ws():
+        try:
+            while True:
+                response = await async_recv_framed(reader)
+                if response is None:
+                    await websocket.send_json({"status": "ERROR", "reason": "Health Server disconnected"})
+                    break
+                await websocket.send_json(response)
+        except Exception:
+            pass
+
+    forward_tasks = [asyncio.create_task(ws_to_tcp()), asyncio.create_task(tcp_to_ws())]
+    done, pending = await asyncio.wait(forward_tasks, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

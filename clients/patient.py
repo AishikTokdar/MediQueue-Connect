@@ -213,21 +213,16 @@ def main():  # noqa: C901
             sub.connect((HOST, PORT))
             sub = wrap_client_socket(sub, server_hostname=HOST)
             tcp_send(sub, {"command": "SUBSCRIBE", "token": token})
-            data = b""
             while True:
-                chunk = sub.recv(8192)
-                if not chunk: break
-                data += chunk
-                while b"\n" in data:
-                    line, data = data.split(b"\n", 1)
-                    if line:
-                        msg = json.loads(line.decode())
-                        if msg.get("status") == "GLOBAL_MSG":
-                            print(f"\n\033[1m\033[93m[SERVER BROADCAST] {msg.get('message')}\033[0m", flush=True)
-                        elif msg.get("status") == "KILL_SESSION":
-                            if msg.get("session_id") == _current_session_id:
-                                print("\n\033[1m\033[91m[SERVER] FORCE TERMINATED SESSION\033[0m", flush=True)
-                                os._exit(0)
+                msg = recv_framed(sub)
+                if not msg:
+                    break
+                if msg.get("status") == "GLOBAL_MSG":
+                    print(f"\n\033[1m\033[93m[SERVER BROADCAST] {msg.get('message')}\033[0m", flush=True)
+                elif msg.get("status") == "KILL_SESSION":
+                    if msg.get("session_id") == _current_session_id:
+                        print("\n\033[1m\033[91m[SERVER] FORCE TERMINATED SESSION\033[0m", flush=True)
+                        os._exit(0)
         except Exception:
             pass
 
