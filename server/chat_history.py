@@ -66,3 +66,33 @@ class ChatHistory:
             session = self._sessions.pop(session_id, None)
         if session:
             session.close(reason)
+
+    def sync_transcript(self, session_id: str, doctor: str, patient: str, messages: list[dict], reason: str = "NORMAL") -> str:
+        """
+        Synchronizes consultation dialogue messages to disk. If the session is active,
+        logs remaining messages; otherwise creates/updates the session transcript file.
+        Returns the absolute filepath to the JSONL log.
+        """
+        with self._lock:
+            self._sessions.pop(session_id, None)
+
+        doctor_dir = os.path.join(_HISTORY_ROOT, doctor)
+        os.makedirs(doctor_dir, exist_ok=True)
+        path = os.path.join(doctor_dir, f"{session_id}.jsonl")
+
+        file_exists = os.path.exists(path) and os.path.getsize(path) > 0
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+        with open(path, "a", encoding="utf-8") as f:
+            if not file_exists:
+                f.write(json.dumps({"event": "SESSION_START", "doctor": doctor, "patient": patient, "ts": now_str}) + "\n")
+            for msg in messages:
+                m_rec = {
+                    "sender": msg.get("sender", "peer"),
+                    "text": msg.get("text", ""),
+                    "ts": msg.get("ts") or now_str,
+                }
+                f.write(json.dumps(m_rec) + "\n")
+            f.write(json.dumps({"event": "SESSION_END", "reason": reason, "ts": now_str}) + "\n")
+
+        return path

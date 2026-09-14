@@ -55,9 +55,19 @@ class RequestChatPayload(BaseModel):
 
 
 class SessionPayload(BaseModel):
-    token: str = Field(..., min_length=1)
+    token: Optional[str] = None
     doctor: str = Field(..., min_length=1)
     session_id: Optional[str] = None
+    patient: Optional[str] = None
+    transcript: Optional[List[Dict[str, Any]]] = None
+
+
+class SyncTranscriptPayload(BaseModel):
+    token: Optional[str] = None
+    session_id: str = Field(..., min_length=1)
+    doctor: str = Field(..., min_length=1)
+    patient: Optional[str] = None
+    transcript: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class DoctorStatePayload(BaseModel):
@@ -124,6 +134,7 @@ COMMAND_MODELS = {
     "ADMIN_GLOBAL_MSG": AdminGlobalMsgPayload,
     "GENERATE_TRANSCRIPT_PDF": GeneratePdfPayload,
     "GET_TASK_STATUS": GetTaskStatusPayload,
+    "SYNC_TRANSCRIPT": SyncTranscriptPayload,
 }
 
 

@@ -515,6 +515,7 @@ def main():  # noqa: C901
     print(f"\n  {enc_label} chat with Dr. {doctor} started.")
     print("  Type 'exit' to end the session.\n")
 
+    transcript: list[dict] = []
 
     while True:
         try:
@@ -524,9 +525,12 @@ def main():  # noqa: C901
 
         if msg.lower() == "exit":
             udp.sendto(json.dumps({"type": "EXIT"}).encode(), (HOST, udp_port))
-            _end_session(tcp, token, doctor, session_id)
+            _end_session(tcp, token, doctor, session_id, username=username, transcript=transcript)
             print("Chat ended. Goodbye!")
             break
+
+        now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        transcript.append({"sender": username, "text": msg, "ts": now_ts})
 
         cipher = encrypt_message(msg, _session_key) if _session_key else msg
         udp.sendto(json.dumps({"type": "CHAT", "text": cipher}).encode(), (HOST, udp_port))
@@ -541,26 +545,32 @@ def main():  # noqa: C901
 
         if reply["type"] == "EXIT":
             print("\n  Doctor ended the session.")
-            _end_session(tcp, token, doctor, session_id)
+            _end_session(tcp, token, doctor, session_id, username=username, transcript=transcript)
             break
 
         if reply["type"] == "CHAT":
             cipher_reply = reply["text"]
             plaintext = decrypt_message(cipher_reply, _session_key) if _session_key else cipher_reply
+            reply_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            transcript.append({"sender": doctor, "text": plaintext, "ts": reply_ts})
             print(f"Doctor: {plaintext}")
 
     udp.close()
     tcp.close()
 
 
-def _end_session(tcp: socket.socket, token: str, doctor: str, session_id: str) -> None:
+def _end_session(tcp: socket.socket, token: str, doctor: str, session_id: str, username: str = "patient", transcript: list[dict] | None = None) -> None:
     try:
-        tcp_send(tcp, {
+        payload = {
             "command": "END_SESSION",
             "token": token,
             "doctor": doctor,
             "session_id": session_id,
-        })
+            "patient": username,
+        }
+        if transcript:
+            payload["transcript"] = transcript
+        tcp_send(tcp, payload)
         tcp_recv(tcp)
     except Exception:
         pass

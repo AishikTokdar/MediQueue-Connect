@@ -249,19 +249,19 @@ def main():
                             "session_id": _current_session_id,
                         }).encode(), addr)
 
-                    peers[addr] = {"name": patient_name, "session_key": s_key}
+                    peers[addr] = {"name": patient_name, "session_key": s_key, "transcript": []}
                     print(f"\n[SESSION STARTED/JOINED] {patient_name}  ID: {_current_session_id}\n")
 
                 elif msg["type"] == "KEY_EXCHANGE":
                     enc_key = msg.get("encrypted_key")
                     s_key = decrypt_session_key(enc_key) if enc_key else None
                     peer_name = "Doctor (Invited)"
-                    peers[addr] = {"name": peer_name, "session_key": s_key}
+                    peers[addr] = {"name": peer_name, "session_key": s_key, "transcript": []}
                     print(f"\n[JOINED] {peer_name}\n")
                     
                 elif msg["type"] == "READY":
                     peer_name = "Doctor (Invited - Plain)"
-                    peers[addr] = {"name": peer_name, "session_key": None}
+                    peers[addr] = {"name": peer_name, "session_key": None, "transcript": []}
                     print(f"\n[JOINED] {peer_name}\n")
 
                 elif msg["type"] == "CHAT" and addr in peers:
@@ -271,6 +271,9 @@ def main():
                     
                     ciphertext = msg["text"]
                     plaintext = decrypt_message(ciphertext, s_key) if s_key else ciphertext
+
+                    msg_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                    p_info.setdefault("transcript", []).append({"sender": p_name, "text": plaintext, "ts": msg_ts})
 
                     print(f"\n[{p_name}]: {plaintext}")
                     
@@ -301,21 +304,27 @@ def main():
                         for peer_addr in list(peers.keys()):
                             sock.sendto(json.dumps({"type": "EXIT"}).encode(), peer_addr)
                         print("\n[SESSION ENDED by doctor]\n")
-                        _notify_server_end(doctor_name, _current_session_id)
+                        active_transcript = p_info.get("transcript", [])
+                        _notify_server_end(doctor_name, _current_session_id, patient_name=p_name, transcript=active_transcript)
                         peers.clear()
                         _current_session_id = None
                         continue
+
+                    reply_ts = time.strftime("%Y-%m-%d %H:%M:%S")
+                    p_info.setdefault("transcript", []).append({"sender": doctor_name, "text": reply, "ts": reply_ts})
 
                     for peer_addr, peer_info in peers.items():
                         my_cipher = encrypt_message(reply, peer_info["session_key"]) if peer_info["session_key"] else reply
                         sock.sendto(json.dumps({"type": "CHAT", "text": my_cipher}).encode(), peer_addr)
 
                 elif msg["type"] == "EXIT" and addr in peers:
-                    p_name = peers[addr]["name"]
+                    p_info = peers[addr]
+                    p_name = p_info["name"]
+                    active_transcript = p_info.get("transcript", [])
                     print(f"\n[{p_name} LEFT SESSION]\n")
                     del peers[addr]
                     if not peers:
-                        _notify_server_end(doctor_name, _current_session_id)
+                        _notify_server_end(doctor_name, _current_session_id, patient_name=p_name, transcript=active_transcript)
                         _current_session_id = None
                         print("\n[SESSION EMPTY -> ENDED]\n")
 
@@ -338,14 +347,18 @@ def main():
         sock.close()
 
 
-def _notify_server_end(doctor_name: str, session_id: str | None) -> None:
+def _notify_server_end(doctor_name: str, session_id: str | None, patient_name: str = "patient", transcript: list[dict] | None = None) -> None:
     if session_id:
-        send_tcp({
+        end_payload = {
             "command": "END_SESSION",
             "token": "DOCTOR_INTERNAL",
             "doctor": doctor_name,
             "session_id": session_id or "",
-        })
+            "patient": patient_name,
+        }
+        if transcript:
+            end_payload["transcript"] = transcript
+        send_tcp(end_payload)
         try:
             want_pdf = input("\n[DOCTOR PORTAL] Export a formatted PDF summary of this consultation? (yes/no): ").strip().lower()
             if want_pdf in ("yes", "y"):

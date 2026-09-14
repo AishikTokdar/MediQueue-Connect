@@ -63,4 +63,5 @@ data/perf_results.json
 data/chat_history/
 data/summaries/
 data/notifications.log
-
+# Local git directory override
+.git_local/

@@ -331,10 +331,25 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
     elif cmd == "END_SESSION":
         doctor = data.get("doctor", "")
         session_id = data.get("session_id", "")
+        patient = data.get("patient", "")
+        transcript = data.get("transcript", [])
         if session_id:
-            chat_hist.end_session(session_id)
+            if transcript:
+                chat_hist.sync_transcript(session_id, doctor, patient or "patient", transcript)
+            else:
+                chat_hist.end_session(session_id)
         next_patient = queue_mgr.end_session(doctor)
         return {"status": "OK", "next_patient": next_patient[0] if isinstance(next_patient, tuple) else next_patient}
+
+    elif cmd == "SYNC_TRANSCRIPT":
+        doctor = data.get("doctor", "")
+        session_id = data.get("session_id", "")
+        patient = data.get("patient", "")
+        transcript = data.get("transcript", [])
+        if session_id and transcript:
+            path = chat_hist.sync_transcript(session_id, doctor, patient or "patient", transcript)
+            return {"status": "OK", "path": path}
+        return {"status": "FAIL", "reason": "Missing session_id or transcript payload"}
 
     elif cmd == "GENERATE_TRANSCRIPT_PDF":
         token = data.get("token")
