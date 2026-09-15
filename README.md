@@ -48,6 +48,7 @@ MediQueue Connect bridges the gap between theoretical computer networking concep
 - **Doctor Terminal**: Online/Offline toggle, live consultation channel, and a multi-peer clinical invite system.
 - **Queue Orchestration Engine**: FIFO-based waiting room that handles doctor-busy states, and automatically notifies queued patients when it is their turn.
 - **Secure Chat Layer**: A hybrid messaging channel that negotiates session keys via TCP, routes low-latency Fernet-encrypted conversation messages over UDP, and synchronizes live consultation transcripts directly into audit-grade JSONL logs.
+- **Digital Prescription (Rx) Engine**: Enables physicians to generate structured digital prescriptions with diagnosis, dosage schedules, dietary advice, and authentic verification tokens rendered directly into PDF exports.
 - **WebSocket Gateway Bridge**: A FastAPI / Uvicorn bridge (`/ws`) translating browser WebSocket JSON frames into 4-byte length-prefixed binary TCP packets.
 - **Prometheus Telemetry Exporter**: Real-time HTTP `/metrics` exporter exposing request counters, active connection gauges, doctor queue depth stats, and p95/p99 latency histograms.
 - **Admin Command Center**: Database manager allowing admins to delete bookings, audit session transcripts, unban IPs, inspect audit trails, and broadcast messages to all connected entities.

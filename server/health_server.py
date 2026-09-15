@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from auth import AuthManager
 from chat_history import ChatHistory
 from crypto_utils import get_server_ssl_context
-from db import get_audit_logs, init_db
+from db import get_audit_logs, init_db, save_prescription, get_prescriptions_for_patient, get_prescription_by_session
 from logger import log, log_audit
 from protocol import async_recv_framed, async_send_framed
 from queue_manager import QueueManager
@@ -350,6 +350,25 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             path = chat_hist.sync_transcript(session_id, doctor, patient or "patient", transcript)
             return {"status": "OK", "path": path}
         return {"status": "FAIL", "reason": "Missing session_id or transcript payload"}
+
+    elif cmd == "ISSUE_PRESCRIPTION":
+        session_id = data.get("session_id", "")
+        doctor = data.get("doctor", "")
+        patient = data.get("patient", "")
+        diagnosis = data.get("diagnosis", "")
+        meds = data.get("medications", [])
+        instructions = data.get("instructions", "")
+        rx_id = save_prescription(session_id, doctor, patient, diagnosis, meds, instructions)
+        log_audit("ISSUE_PRESCRIPTION", user=doctor, trace_id=trace_id, details=f"Rx ID: {rx_id}, Patient: {patient}, Diagnosis: {diagnosis}")
+        return {"status": "OK", "prescription_id": rx_id}
+
+    elif cmd == "GET_MY_PRESCRIPTIONS":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        rx_list = get_prescriptions_for_patient(user)
+        return {"status": "OK", "prescriptions": rx_list}
 
     elif cmd == "GENERATE_TRANSCRIPT_PDF":
         token = data.get("token")

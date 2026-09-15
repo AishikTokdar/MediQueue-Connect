@@ -359,6 +359,38 @@ def _notify_server_end(doctor_name: str, session_id: str | None, patient_name: s
         if transcript:
             end_payload["transcript"] = transcript
         send_tcp(end_payload)
+
+        try:
+            want_rx = input("\n[DOCTOR PORTAL] Issue a digital prescription (Rx) for this patient? (yes/no): ").strip().lower()
+            if want_rx in ("yes", "y"):
+                diagnosis = input("  Primary Diagnosis: ").strip() or "General Consultation"
+                meds = []
+                print("  Enter prescribed medications (press Enter on Medication Name when done):")
+                while True:
+                    m_name = input("    Medication Name: ").strip()
+                    if not m_name:
+                        break
+                    m_dose = input("    Dosage (e.g., 500mg): ").strip() or "Standard"
+                    m_freq = input("    Frequency (e.g., Twice daily): ").strip() or "Daily"
+                    m_dur = input("    Duration (e.g., 5 days): ").strip() or "5 days"
+                    m_notes = input("    Notes (optional): ").strip()
+                    meds.append({"name": m_name, "dosage": m_dose, "frequency": m_freq, "duration": m_dur, "notes": m_notes})
+                instructions = input("  General Advice / Dietary Precautions: ").strip()
+                rx_res = send_tcp({
+                    "command": "ISSUE_PRESCRIPTION",
+                    "token": "DOCTOR_INTERNAL",
+                    "session_id": session_id or "",
+                    "doctor": doctor_name,
+                    "patient": patient_name,
+                    "diagnosis": diagnosis,
+                    "medications": meds,
+                    "instructions": instructions,
+                })
+                if rx_res and rx_res.get("status") == "OK":
+                    print(f"  [OK] Digital prescription issued successfully (Rx ID: {rx_res.get('prescription_id')})")
+        except Exception as e:
+            print(f"  Notice: Could not issue prescription: {e}")
+
         try:
             want_pdf = input("\n[DOCTOR PORTAL] Export a formatted PDF summary of this consultation? (yes/no): ").strip().lower()
             if want_pdf in ("yes", "y"):

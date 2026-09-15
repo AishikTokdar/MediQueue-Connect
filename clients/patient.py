@@ -136,6 +136,36 @@ def cancel_own_appointment(tcp: socket.socket, token: str) -> None:
         print(f"Cancellation failed: {res.get('reason', 'Unknown error')}")
 
 
+def show_prescriptions(tcp: socket.socket, token: str) -> None:
+    tcp_send(tcp, {"command": "GET_MY_PRESCRIPTIONS", "token": token})
+    res = tcp_recv(tcp)
+    if res.get("status") != "OK":
+        print(f"Failed to load prescriptions: {res.get('reason', 'Unknown error')}")
+        return
+    rx_list = res.get("prescriptions", [])
+    if not rx_list:
+        print("\nNo digital prescriptions found on file for your account.")
+        return
+    print("\n" + "=" * 65)
+    print("                     YOUR DIGITAL PRESCRIPTIONS (Rx)")
+    print("=" * 65)
+    for idx, rx in enumerate(rx_list, 1):
+        created = rx.get("created_at", "N/A")
+        doc = rx.get("doctor", "Unknown")
+        diag = rx.get("diagnosis", "Unspecified")
+        print(f"\n[{idx}] Date: {created} | Prescribed by: Dr. {doc}")
+        print(f"    Diagnosis: {diag}")
+        inst = rx.get("instructions")
+        if inst:
+            print(f"    Advice: {inst}")
+        meds = rx.get("medications", [])
+        if meds:
+            print("    Medications:")
+            for m in meds:
+                print(f"      - {m.get('name')}: {m.get('dosage')} | {m.get('frequency')} for {m.get('duration')}")
+    print("=" * 65)
+
+
 def main():  # noqa: C901
     banner("Healthcare System  -  Welcome")
 
@@ -240,13 +270,18 @@ def main():  # noqa: C901
         print("  2. Chat with doctor")
         print("  3. Show appointments")
         print("  4. Remove my appointment")
-        print("  5. Exit")
-        choice = input("Select an option (1-5): ").strip()
+        print("  5. View my digital prescriptions (Rx)")
+        print("  6. Exit")
+        choice = input("Select an option (1-6): ").strip()
 
-        if choice == "5":
+        if choice == "6":
             tcp.close()
             print("Goodbye!")
             sys.exit(0)
+
+        elif choice == "5":
+            show_prescriptions(tcp, token)
+            continue
             
         elif choice == "1":
             tcp_send(tcp, {"command": "GET_SPECIALIZATIONS", "token": token})

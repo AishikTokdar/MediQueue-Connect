@@ -103,6 +103,24 @@ class GetTaskStatusPayload(BaseModel):
     task_id: str = Field(..., min_length=1)
 
 
+class MedicationItem(BaseModel):
+    name: str = Field(..., min_length=1)
+    dosage: str = Field(..., min_length=1)
+    frequency: str = Field(..., min_length=1)
+    duration: str = Field(..., min_length=1)
+    notes: Optional[str] = None
+
+
+class IssuePrescriptionPayload(BaseModel):
+    token: Optional[str] = None
+    session_id: str = Field(..., min_length=1)
+    doctor: str = Field(..., min_length=1)
+    patient: str = Field(..., min_length=1)
+    diagnosis: str = Field(..., min_length=1)
+    medications: List[MedicationItem] = Field(default_factory=list)
+    instructions: Optional[str] = None
+
+
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
     "REGISTER": RegisterPayload,
@@ -135,6 +153,8 @@ COMMAND_MODELS = {
     "GENERATE_TRANSCRIPT_PDF": GeneratePdfPayload,
     "GET_TASK_STATUS": GetTaskStatusPayload,
     "SYNC_TRANSCRIPT": SyncTranscriptPayload,
+    "ISSUE_PRESCRIPTION": IssuePrescriptionPayload,
+    "GET_MY_PRESCRIPTIONS": TokenPayload,
 }
 
 

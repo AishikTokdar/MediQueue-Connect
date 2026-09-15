@@ -22,6 +22,7 @@ def generate_transcript_pdf(
     patient: str,
     transcript_records: list[dict],
     output_path: str,
+    prescription: dict | None = None,
 ) -> str:
     """
     Generates a beautifully styled, professional medical consultation summary PDF
@@ -275,7 +276,72 @@ def generate_transcript_pdf(
 
     t_table.setStyle(TableStyle(t_style))
     elements.append(t_table)
-    elements.append(Spacer(1, 16))
+    elements.append(Spacer(1, 14))
+
+    # Optional Clinical Prescription (Rx) Section
+    if prescription:
+        elements.append(Paragraph("Clinical Prescription & Diagnosis (Rx)", section_style))
+        diag_text = html.escape(prescription.get("diagnosis", "Unspecified"))
+        inst_text = html.escape(prescription.get("instructions", "") or "None provided")
+        rx_meta = [
+            [
+                Paragraph("Primary Diagnosis:", meta_label_style),
+                Paragraph(f"<b>{diag_text}</b>", meta_val_style),
+                Paragraph("Prescribing Physician:", meta_label_style),
+                Paragraph(f"Dr. {html.escape(doctor)}", meta_val_style),
+            ],
+            [
+                Paragraph("Clinical Advice / Diet:", meta_label_style),
+                Paragraph(inst_text, meta_val_style),
+                Paragraph("Rx Auth Token:", meta_label_style),
+                Paragraph(f"RX-{session_id[:8].upper()}", meta_val_style),
+            ],
+        ]
+        rx_meta_table = Table(rx_meta, colWidths=[120, 150, 120, 150])
+        rx_meta_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F0FDF4")),
+            ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#86EFAC")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#BBF7D0")),
+            ("PADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(rx_meta_table)
+        elements.append(Spacer(1, 8))
+
+        meds = prescription.get("medications", [])
+        if meds:
+            rx_rows = [
+                [
+                    Paragraph("Medication Name", table_header_style),
+                    Paragraph("Dosage", table_header_style),
+                    Paragraph("Frequency", table_header_style),
+                    Paragraph("Duration", table_header_style),
+                    Paragraph("Notes", table_header_style),
+                ]
+            ]
+            for m in meds:
+                rx_rows.append([
+                    Paragraph(f"<b>{html.escape(str(m.get('name', '')))}</b>", cell_text_style),
+                    Paragraph(html.escape(str(m.get("dosage", ""))), cell_text_style),
+                    Paragraph(html.escape(str(m.get("frequency", ""))), cell_text_style),
+                    Paragraph(html.escape(str(m.get("duration", ""))), cell_text_style),
+                    Paragraph(html.escape(str(m.get("notes", "") or "-")), cell_text_style),
+                ])
+            rx_table = Table(rx_rows, colWidths=[150, 80, 110, 80, 120])
+            rx_style = [
+                ("BACKGROUND", (0, 0), (-1, 0), TEAL),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BOX", (0, 0), (-1, -1), 1, BORDER_COLOR),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, BORDER_COLOR),
+                ("PADDING", (0, 0), (-1, -1), 5),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+            for r_idx in range(1, len(rx_rows)):
+                bg = colors.HexColor("#FFFFFF") if r_idx % 2 == 1 else colors.HexColor("#F0FDFA")
+                rx_style.append(("BACKGROUND", (0, r_idx), (-1, r_idx), bg))
+            rx_table.setStyle(TableStyle(rx_style))
+            elements.append(rx_table)
+            elements.append(Spacer(1, 14))
 
     # Doctor Verification Sign-off Box
     signoff_data = [

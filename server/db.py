@@ -67,6 +67,18 @@ def init_db() -> None:
                 details TEXT
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS prescriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                doctor TEXT NOT NULL,
+                patient TEXT NOT NULL,
+                diagnosis TEXT NOT NULL,
+                medications TEXT NOT NULL,
+                instructions TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
 
     _seed_from_json(conn)
 
@@ -153,3 +165,51 @@ def get_audit_logs(limit: int = 50) -> List[Dict[str, Any]]:
     cur.execute("SELECT id, timestamp, trace_id, user, action, details FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,))
     rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+def save_prescription(session_id: str, doctor: str, patient: str, diagnosis: str, medications: List[Dict[str, Any]], instructions: str = "") -> int:
+    conn = get_db_connection()
+    with conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO prescriptions (session_id, doctor, patient, diagnosis, medications, instructions) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, doctor, patient, diagnosis, json.dumps(medications), instructions)
+        )
+        return cur.lastrowid
+
+
+def get_prescriptions_for_patient(patient: str) -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, session_id, doctor, patient, diagnosis, medications, instructions, created_at FROM prescriptions WHERE patient = ? ORDER BY id DESC",
+        (patient,)
+    )
+    rows = cur.fetchall()
+    result = []
+    for r in rows:
+        item = dict(r)
+        try:
+            item["medications"] = json.loads(item["medications"])
+        except Exception:
+            item["medications"] = []
+        result.append(item)
+    return result
+
+
+def get_prescription_by_session(session_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, session_id, doctor, patient, diagnosis, medications, instructions, created_at FROM prescriptions WHERE session_id = ?",
+        (session_id,)
+    )
+    row = cur.fetchone()
+    if row:
+        item = dict(row)
+        try:
+            item["medications"] = json.loads(item["medications"])
+        except Exception:
+            item["medications"] = []
+        return item
+    return None
