@@ -13,7 +13,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from auth import AuthManager
 from chat_history import ChatHistory
 from crypto_utils import get_server_ssl_context
-from db import get_audit_logs, init_db, save_prescription, get_prescriptions_for_patient, get_prescription_by_session
+from db import (
+    get_audit_logs,
+    init_db,
+    save_prescription,
+    get_prescriptions_for_patient,
+    get_prescription_by_session,
+    save_patient_profile,
+    get_patient_profile,
+)
 from logger import log, log_audit
 from protocol import async_recv_framed, async_send_framed
 from queue_manager import QueueManager
@@ -205,6 +213,28 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             return {"status": "OK"}
         else:
             return {"status": "FAIL", "reason": "Username already exists"}
+
+    elif cmd == "UPDATE_PROFILE":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        dob = data.get("dob", "")
+        blood_group = data.get("blood_group", "")
+        allergies = data.get("allergies", [])
+        conditions = data.get("chronic_conditions", [])
+        contact = data.get("emergency_contact", "")
+        save_patient_profile(user, dob=dob, blood_group=blood_group, allergies=allergies, chronic_conditions=conditions, emergency_contact=contact)
+        log_audit("UPDATE_PATIENT_PROFILE", user=user, trace_id=trace_id)
+        return {"status": "OK"}
+
+    elif cmd == "GET_PROFILE":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        prof = get_patient_profile(user)
+        return {"status": "OK", "profile": prof or {}}
 
     elif cmd == "GET_SLOTS":
         token = data.get("token", "")

@@ -166,6 +166,52 @@ def show_prescriptions(tcp: socket.socket, token: str) -> None:
     print("=" * 65)
 
 
+def manage_profile(tcp: socket.socket, token: str) -> None:
+    tcp_send(tcp, {"command": "GET_PROFILE", "token": token})
+    res = tcp_recv(tcp)
+    prof = res.get("profile", {})
+    
+    print("\n" + "=" * 55)
+    print("           PATIENT CLINICAL HEALTH PROFILE")
+    print("=" * 55)
+    print(f"  Date of Birth     : {prof.get('dob') or 'Not specified'}")
+    print(f"  Blood Group       : {prof.get('blood_group') or 'Not specified'}")
+    allergies = prof.get("allergies", [])
+    print(f"  Known Allergies   : {', '.join(allergies) if allergies else 'None reported'}")
+    conditions = prof.get("chronic_conditions", [])
+    print(f"  Chronic Conditions: {', '.join(conditions) if conditions else 'None reported'}")
+    print(f"  Emergency Contact : {prof.get('emergency_contact') or 'Not specified'}")
+    print("=" * 55)
+
+    if not yn("Do you want to update your profile details? (yes/no): "):
+        return
+
+    dob = input(f"Date of Birth (YYYY-MM-DD) [{prof.get('dob', '')}]: ").strip() or prof.get("dob", "")
+    bg = input(f"Blood Group (e.g., A+, O-, B+) [{prof.get('blood_group', '')}]: ").strip() or prof.get("blood_group", "")
+    current_all = ", ".join(allergies)
+    all_in = input(f"Known Drug/Food Allergies (comma-separated) [{current_all}]: ").strip()
+    new_all = [a.strip() for a in all_in.split(",") if a.strip()] if all_in else allergies
+    current_cond = ", ".join(conditions)
+    cond_in = input(f"Chronic Medical Conditions (comma-separated) [{current_cond}]: ").strip()
+    new_cond = [c.strip() for c in cond_in.split(",") if c.strip()] if cond_in else conditions
+    contact = input(f"Emergency Contact Number [{prof.get('emergency_contact', '')}]: ").strip() or prof.get("emergency_contact", "")
+
+    tcp_send(tcp, {
+        "command": "UPDATE_PROFILE",
+        "token": token,
+        "dob": dob,
+        "blood_group": bg,
+        "allergies": new_all,
+        "chronic_conditions": new_cond,
+        "emergency_contact": contact,
+    })
+    update_res = tcp_recv(tcp)
+    if update_res.get("status") == "OK":
+        print("[OK] Clinical health profile updated successfully.")
+    else:
+        print(f"Failed to update profile: {update_res.get('reason', 'Unknown error')}")
+
+
 def main():  # noqa: C901
     banner("Healthcare System  -  Welcome")
 
@@ -271,13 +317,18 @@ def main():  # noqa: C901
         print("  3. Show appointments")
         print("  4. Remove my appointment")
         print("  5. View my digital prescriptions (Rx)")
-        print("  6. Exit")
-        choice = input("Select an option (1-6): ").strip()
+        print("  6. Manage health profile & medical history")
+        print("  7. Exit")
+        choice = input("Select an option (1-7): ").strip()
 
-        if choice == "6":
+        if choice == "7":
             tcp.close()
             print("Goodbye!")
             sys.exit(0)
+
+        elif choice == "6":
+            manage_profile(tcp, token)
+            continue
 
         elif choice == "5":
             show_prescriptions(tcp, token)

@@ -44,7 +44,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 MediQueue Connect bridges the gap between theoretical computer networking concepts and practical software engineering. Developed as part of the **Computer Communication and Networks (CCN/CN) curriculum**, this application leverages custom client-server application-layer protocols to orchestrate:
 
-- **Patient Portal**: Profile registration, login, filterable scheduling system based on patient's health insurance eligibility, and real-time appointment booking.
+- **Patient Portal**: Profile registration, login, comprehensive health profile management (blood group, drug/food allergies, chronic medical conditions), filterable scheduling based on health insurance eligibility, and real-time appointment booking.
 - **Doctor Terminal**: Online/Offline toggle, live consultation channel, and a multi-peer clinical invite system.
 - **Queue Orchestration Engine**: FIFO-based waiting room that handles doctor-busy states, and automatically notifies queued patients when it is their turn.
 - **Secure Chat Layer**: A hybrid messaging channel that negotiates session keys via TCP, routes low-latency Fernet-encrypted conversation messages over UDP, and synchronizes live consultation transcripts directly into audit-grade JSONL logs.

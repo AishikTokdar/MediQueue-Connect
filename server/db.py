@@ -79,6 +79,18 @@ def init_db() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS patient_profiles (
+                username TEXT PRIMARY KEY,
+                dob TEXT,
+                blood_group TEXT,
+                allergies TEXT,
+                chronic_conditions TEXT,
+                emergency_contact TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(username) REFERENCES users(username)
+            );
+        """)
 
     _seed_from_json(conn)
 
@@ -211,5 +223,51 @@ def get_prescription_by_session(session_id: str) -> Optional[Dict[str, Any]]:
             item["medications"] = json.loads(item["medications"])
         except Exception:
             item["medications"] = []
+        return item
+    return None
+
+
+def save_patient_profile(username: str, dob: str = "", blood_group: str = "", allergies: List[str] | None = None, chronic_conditions: List[str] | None = None, emergency_contact: str = "") -> None:
+    conn = get_db_connection()
+    with conn:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO patient_profiles (username, dob, blood_group, allergies, chronic_conditions, emergency_contact, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(username) DO UPDATE SET
+                dob = excluded.dob,
+                blood_group = excluded.blood_group,
+                allergies = excluded.allergies,
+                chronic_conditions = excluded.chronic_conditions,
+                emergency_contact = excluded.emergency_contact,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            username,
+            dob,
+            blood_group,
+            json.dumps(allergies or []),
+            json.dumps(chronic_conditions or []),
+            emergency_contact
+        ))
+
+
+def get_patient_profile(username: str) -> Optional[Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT username, dob, blood_group, allergies, chronic_conditions, emergency_contact, updated_at FROM patient_profiles WHERE username = ?",
+        (username,)
+    )
+    row = cur.fetchone()
+    if row:
+        item = dict(row)
+        try:
+            item["allergies"] = json.loads(item["allergies"])
+        except Exception:
+            item["allergies"] = []
+        try:
+            item["chronic_conditions"] = json.loads(item["chronic_conditions"])
+        except Exception:
+            item["chronic_conditions"] = []
         return item
     return None

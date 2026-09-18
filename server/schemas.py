@@ -121,9 +121,20 @@ class IssuePrescriptionPayload(BaseModel):
     instructions: Optional[str] = None
 
 
+class UpdateProfilePayload(BaseModel):
+    token: str = Field(..., min_length=1)
+    dob: Optional[str] = None
+    blood_group: Optional[str] = None
+    allergies: List[str] = Field(default_factory=list)
+    chronic_conditions: List[str] = Field(default_factory=list)
+    emergency_contact: Optional[str] = None
+
+
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
     "REGISTER": RegisterPayload,
+    "UPDATE_PROFILE": UpdateProfilePayload,
+    "GET_PROFILE": TokenPayload,
     "GET_SLOTS": GetSlotsPayload,
     "BOOK": BookPayload,
     "BOOK_SLOT": BookPayload,
