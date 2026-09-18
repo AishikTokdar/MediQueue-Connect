@@ -40,6 +40,31 @@ def send_tcp(payload: dict) -> dict | None:
         return None
 
 
+def display_clinical_intake(patient_name: str) -> None:
+    res = send_tcp({
+        "command": "GET_PATIENT_INTAKE",
+        "doctor": "DOCTOR_INTERNAL",
+        "token": "DOCTOR_INTERNAL",
+        "patient": patient_name,
+    })
+    prof = res.get("profile", {}) if res else {}
+    print("+" + "-" * 62 + "+")
+    print(f"|  CLINICAL INTAKE CARD: {patient_name:40} |")
+    print("+" + "-" * 62 + "+")
+    dob = prof.get("dob") or "Unknown"
+    bg = prof.get("blood_group") or "Not recorded"
+    print(f"|  DOB: {dob:20} Blood Group: {bg:24} |")
+    allergies = prof.get("allergies", [])
+    all_str = ", ".join(allergies).upper() if allergies else "NONE RECORDED"
+    print(f"|  ALLERGIES (ALERT): {all_str:41} |")
+    conditions = prof.get("chronic_conditions", [])
+    cond_str = ", ".join(conditions) if conditions else "None recorded"
+    print(f"|  Chronic Conditions: {cond_str:40} |")
+    contact = prof.get("emergency_contact") or "Not provided"
+    print(f"|  Emergency Contact : {contact:40} |")
+    print("+" + "-" * 62 + "+\n")
+
+
 def register_new_doctor_flow(preset_name: str | None = None) -> tuple[str, dict]:
     print("\n=======================================================")
     print("           REGISTER NEW DOCTOR PROFILE")
@@ -251,6 +276,7 @@ def main():
 
                     peers[addr] = {"name": patient_name, "session_key": s_key, "transcript": []}
                     print(f"\n[SESSION STARTED/JOINED] {patient_name}  ID: {_current_session_id}\n")
+                    display_clinical_intake(patient_name)
 
                 elif msg["type"] == "KEY_EXCHANGE":
                     enc_key = msg.get("encrypted_key")

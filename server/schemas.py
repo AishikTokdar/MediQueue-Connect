@@ -130,11 +130,18 @@ class UpdateProfilePayload(BaseModel):
     emergency_contact: Optional[str] = None
 
 
+class PatientIntakePayload(BaseModel):
+    token: Optional[str] = None
+    doctor: Optional[str] = None
+    patient: str = Field(..., min_length=1)
+
+
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
     "REGISTER": RegisterPayload,
     "UPDATE_PROFILE": UpdateProfilePayload,
     "GET_PROFILE": TokenPayload,
+    "GET_PATIENT_INTAKE": PatientIntakePayload,
     "GET_SLOTS": GetSlotsPayload,
     "BOOK": BookPayload,
     "BOOK_SLOT": BookPayload,

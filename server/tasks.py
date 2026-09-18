@@ -66,11 +66,13 @@ def generate_pdf_summary_internal(session_id: str, doctor: str, patient: str, ou
     output_path = os.path.join(target_dir, pdf_filename)
 
     prescription_info = None
+    patient_profile = None
     try:
-        from db import get_prescription_by_session
+        from db import get_prescription_by_session, get_patient_profile
         prescription_info = get_prescription_by_session(session_id)
+        patient_profile = get_patient_profile(patient)
     except Exception as e:
-        logger.debug(f"Could not load prescription for session {session_id}: {e}")
+        logger.debug(f"Could not load auxiliary clinical data for session {session_id}: {e}")
 
     abs_path = generate_transcript_pdf(
         session_id=session_id,
@@ -79,6 +81,7 @@ def generate_pdf_summary_internal(session_id: str, doctor: str, patient: str, ou
         transcript_records=transcript_records,
         output_path=output_path,
         prescription=prescription_info,
+        patient_profile=patient_profile,
     )
     logger.info(f"Successfully generated transcript PDF at {abs_path}")
     log_audit("PDF_SUMMARY_GENERATED", user=doctor, details=f"Patient: {patient}, Session: {session_id}, PDF: {abs_path}")

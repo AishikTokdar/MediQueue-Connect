@@ -477,8 +477,14 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         if next_patient:
             await _incr_stat("total_chats")
             log_audit("NEXT_PATIENT", user=doctor, trace_id=trace_id, details=f"Patient: {next_patient}")
-            return {"status": "OK", "next_patient": next_patient}
+            prof = get_patient_profile(next_patient)
+            return {"status": "OK", "next_patient": next_patient, "profile": prof or {}}
         return {"status": "EMPTY", "reason": "No patients in queue"}
+
+    elif cmd == "GET_PATIENT_INTAKE":
+        patient = data.get("patient", "")
+        prof = get_patient_profile(patient)
+        return {"status": "OK", "profile": prof or {}}
 
     elif cmd == "GET_QUEUE":
         token = data.get("token", "")

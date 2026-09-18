@@ -23,6 +23,7 @@ def generate_transcript_pdf(
     transcript_records: list[dict],
     output_path: str,
     prescription: dict | None = None,
+    patient_profile: dict | None = None,
 ) -> str:
     """
     Generates a beautifully styled, professional medical consultation summary PDF
@@ -206,6 +207,17 @@ def generate_transcript_pdf(
             Paragraph("Fernet AES-128 / UDP Tunnel", meta_val_style),
         ],
     ]
+
+    if patient_profile:
+        bg = patient_profile.get("blood_group") or "Not recorded"
+        allergies_list = patient_profile.get("allergies", [])
+        all_display = ", ".join(allergies_list).upper() if allergies_list else "None recorded"
+        meta_data.append([
+            Paragraph("Blood Group:", meta_label_style),
+            Paragraph(html.escape(bg), meta_val_style),
+            Paragraph("Known Allergies:", meta_label_style),
+            Paragraph(f"<b>{html.escape(all_display)}</b>", meta_val_style),
+        ])
 
     meta_table = Table(meta_data, colWidths=[110, 160, 110, 160])
     meta_table.setStyle(
