@@ -19,6 +19,39 @@ def _derive_key(passphrase: bytes) -> bytes:
     return base64.urlsafe_b64encode(digest)
 
 
+def generate_ecdh_keypair():
+    """Generates an ephemeral X25519 private key and its base64-encoded raw public bytes."""
+    if not _CRYPTO_AVAILABLE:
+        raise RuntimeError("cryptography package is not installed. Run: pip install cryptography")
+    from cryptography.hazmat.primitives.asymmetric import x25519
+    from cryptography.hazmat.primitives import serialization
+    private_key = x25519.X25519PrivateKey.generate()
+    public_bytes = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
+    )
+    return private_key, base64.b64encode(public_bytes).decode("ascii")
+
+
+def derive_ecdh_shared_key(private_key, peer_public_b64: str) -> bytes:
+    """Derives a shared symmetric Fernet key from an X25519 private key and peer's raw public bytes via HKDF-SHA256."""
+    if not _CRYPTO_AVAILABLE:
+        raise RuntimeError("cryptography package not installed")
+    from cryptography.hazmat.primitives.asymmetric import x25519
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    from cryptography.hazmat.primitives import hashes
+    peer_raw = base64.b64decode(peer_public_b64.encode("ascii"))
+    peer_public_key = x25519.X25519PublicKey.from_public_bytes(peer_raw)
+    shared_secret = private_key.exchange(peer_public_key)
+    derived = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"mediqueue-ecdh-x25519-v1",
+        info=b"consultation-session-key",
+    ).derive(shared_secret)
+    return base64.urlsafe_b64encode(derived)
+
+
 def generate_session_key() -> bytes:
     if not _CRYPTO_AVAILABLE:
         raise RuntimeError("cryptography package is not installed. Run: pip install cryptography")

@@ -10,6 +10,8 @@ import getpass
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server"))
 
 from crypto_utils import (
+    generate_ecdh_keypair,
+    derive_ecdh_shared_key,
     decrypt_session_key,
     encrypt_message,
     decrypt_message,
@@ -543,11 +545,20 @@ def main():  # noqa: C901
 
     print(f"\nConnecting to {doctor} on UDP port {udp_port}...")
 
-    udp.sendto(json.dumps({
+    ecdh_priv = None
+    hello_payload = {
         "type": "HELLO",
         "patient": username,
         "session_id": session_id,
-    }).encode(), (HOST, udp_port))
+    }
+    if crypto_available():
+        try:
+            ecdh_priv, pub_b64 = generate_ecdh_keypair()
+            hello_payload["public_key"] = pub_b64
+        except Exception:
+            ecdh_priv = None
+
+    udp.sendto(json.dumps(hello_payload).encode(), (HOST, udp_port))
 
     try:
         raw, _ = udp.recvfrom(4096)
@@ -568,12 +579,19 @@ def main():  # noqa: C901
     _session_key = None
 
     if handshake["type"] == "KEY_EXCHANGE":
-        enc_key = handshake["encrypted_key"]
-        try:
-            _session_key = decrypt_session_key(enc_key)
-            print(f"  [ENCRYPTED] Session established")
-        except Exception as e:
-            print(f"  [WARN] Key decryption failed: {e}. Using plaintext.")
+        if "public_key" in handshake and ecdh_priv is not None:
+            try:
+                _session_key = derive_ecdh_shared_key(ecdh_priv, handshake["public_key"])
+                print("  [ENCRYPTED - ECDH X25519] Ephemeral session key negotiated with Perfect Forward Secrecy.")
+            except Exception as e:
+                print(f"  [WARN] ECDH key derivation failed: {e}. Falling back.")
+        elif "encrypted_key" in handshake:
+            enc_key = handshake["encrypted_key"]
+            try:
+                _session_key = decrypt_session_key(enc_key)
+                print("  [ENCRYPTED - Legacy Passphrase] Session established")
+            except Exception as e:
+                print(f"  [WARN] Key decryption failed: {e}. Using plaintext.")
     elif handshake["type"] == "READY":
         print("  Chat session established (no encryption).")
     elif handshake["type"] == "BUSY":

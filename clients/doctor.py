@@ -8,6 +8,8 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "server"))
 
 from crypto_utils import (
+    generate_ecdh_keypair,
+    derive_ecdh_shared_key,
     generate_session_key,
     encrypt_session_key,
     decrypt_session_key,
@@ -261,13 +263,27 @@ def main():
                     
                     s_key = None
                     if crypto_available():
-                        s_key = generate_session_key()
-                        enc_key = encrypt_session_key(s_key)
-                        sock.sendto(json.dumps({
-                            "type": "KEY_EXCHANGE",
-                            "encrypted_key": enc_key,
-                            "session_id": _current_session_id,
-                        }).encode(), addr)
+                        if "public_key" in msg:
+                            try:
+                                doc_priv, doc_pub_b64 = generate_ecdh_keypair()
+                                s_key = derive_ecdh_shared_key(doc_priv, msg["public_key"])
+                                sock.sendto(json.dumps({
+                                    "type": "KEY_EXCHANGE",
+                                    "public_key": doc_pub_b64,
+                                    "session_id": _current_session_id,
+                                }).encode(), addr)
+                                print(f"  [ENCRYPTED - ECDH X25519] Ephemeral key negotiated with {patient_name}")
+                            except Exception as e:
+                                print(f"  [WARN] ECDH key exchange failed: {e}")
+                                s_key = None
+                        if s_key is None:
+                            s_key = generate_session_key()
+                            enc_key = encrypt_session_key(s_key)
+                            sock.sendto(json.dumps({
+                                "type": "KEY_EXCHANGE",
+                                "encrypted_key": enc_key,
+                                "session_id": _current_session_id,
+                            }).encode(), addr)
                     else:
                         sock.sendto(json.dumps({
                             "type": "READY",

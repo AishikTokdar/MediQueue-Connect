@@ -525,13 +525,12 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Containerized Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter using `Dockerfile` and `docker-compose.yml`.
 11. **Distributed Asynchronous Task Queue (Celery / RabbitMQ) & PDF Consultation Exporter** *(Implemented)*:
     Integrated Celery background task workers (`server/celery_app.py`, `server/tasks.py`) and RabbitMQ AMQP brokers to offload heavy background operations (clinical consultation transcript PDF summary generation via ReportLab, email/SMS appointment reminders) off the main asyncio TCP/WebSocket server loop. When ending a consultation, terminal clients (`patient.py`, `doctor.py`) prompt users to export a formatted PDF summary saved under `data/summaries/<doctor>/<session_id>_summary.pdf`.
-    *(Note: Email and SMS reminder notifications are statutory/mock dispatches implemented for demonstration purposes to showcase background task queue offloading and audit logging without requiring external paid gateway credentials).*
+12. **Ephemeral ECDH (X25519) Key Exchange with Forward Secrecy** *(Implemented)*:
+    Implemented true Elliptic Curve Diffie-Hellman Ephemeral (ECDHE) key exchange over UDP peer sockets using Curve25519 (`x25519.X25519PrivateKey`) and HKDF-SHA256 key derivation (`crypto_utils.py`), eliminating pre-shared static passphrases and providing Perfect Forward Secrecy (PFS).
 
 ### Planned Architectural Roadmap (Future)
 
-1. **True Diffie-Hellman Key Exchange (DHKE)**:
-   Implement an actual Diffie-Hellman or Elliptic Curve Diffie-Hellman (ECDH) key exchange protocol at the start of UDP sessions. This would allow patients and doctors to generate a shared session key without relying on a hardcoded passphrase (`blue-scrubs-and-cold-coffee-2026`).
-2. **Real-time Audio/Video Streaming (RTP/RTCP)**:
+1. **Real-time Audio/Video Streaming (RTP/RTCP)**:
    Extend the consultation layer to support voice and video by packetizing microphone/camera streams and transmitting them over UDP, managed by a session signaling protocol.
 
 ---
