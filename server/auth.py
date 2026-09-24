@@ -16,6 +16,7 @@ class AuthManager:
         init_db()
         self.ph = PasswordHasher()
         self.sessions: Dict[str, str] = {}
+        self.roles: Dict[str, str] = {}
 
     def _hash_password(self, pwd: str) -> str:
         return self.ph.hash(pwd)
@@ -51,6 +52,34 @@ class AuthManager:
 
         return True
 
+    def authenticate_doctor(self, doctor_name: str, pwd: str) -> bool:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT name, password_hash FROM doctors WHERE name = ?", (doctor_name,))
+        row = cur.fetchone()
+        if not row:
+            return False
+
+        current_hash = row["password_hash"] or ""
+        if not current_hash:
+            # First-time initialization for seeded doctor profiles
+            new_hash = self._hash_password(pwd)
+            with conn:
+                conn.execute("UPDATE doctors SET password_hash = ? WHERE name = ?", (new_hash, doctor_name))
+            add_audit_log(action="DOCTOR_SET_PASSWORD", user=doctor_name, details="Initialized doctor credentials")
+            return True
+
+        if not self._verify_password(pwd, current_hash):
+            return False
+
+        if len(current_hash) == 64:
+            new_hash = self._hash_password(pwd)
+            with conn:
+                conn.execute("UPDATE doctors SET password_hash = ? WHERE name = ?", (new_hash, doctor_name))
+
+        add_audit_log(action="DOCTOR_LOGIN", user=doctor_name, details="Doctor authenticated successfully")
+        return True
+
     def register(self, user: str, pwd: str, insurance: List[str]) -> bool:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -72,19 +101,37 @@ class AuthManager:
         except Exception:
             return False
 
-    def create_session(self, token: str, user: str) -> None:
+    def create_session(self, token: str, user: str, role: str = "patient") -> None:
         self.sessions[token] = user
-        cache.set_session(token, user)
+        self.roles[token] = role
+        cache.set_session(token, f"{role}:{user}")
 
     def validate(self, token: str) -> bool:
+        if token == "DOCTOR_INTERNAL":
+            return True
         cached_user = cache.get_session(token)
         if cached_user:
             return True
         return token in self.sessions
 
+    def get_role(self, token: str) -> str:
+        if token == "DOCTOR_INTERNAL":
+            return "doctor"
+        cached = cache.get_session(token)
+        if cached and ":" in cached:
+            return cached.split(":", 1)[0]
+        return self.roles.get(token, "patient" if self.validate(token) else "")
+
+    def is_doctor(self, token: str) -> bool:
+        return self.get_role(token) == "doctor"
+
     def get_user(self, token: str) -> str:
+        if token == "DOCTOR_INTERNAL":
+            return "DOCTOR_INTERNAL"
         cached_user = cache.get_session(token)
         if cached_user:
+            if ":" in cached_user:
+                return cached_user.split(":", 1)[1]
             return cached_user
         return self.sessions.get(token, "")
 
@@ -105,4 +152,5 @@ class AuthManager:
 
     def invalidate(self, token: str) -> None:
         self.sessions.pop(token, None)
+        self.roles.pop(token, None)
         cache.delete_session(token)

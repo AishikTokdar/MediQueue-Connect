@@ -7,6 +7,11 @@ class LoginPayload(BaseModel):
     password: str = Field(..., min_length=1)
 
 
+class DoctorLoginPayload(BaseModel):
+    doctor: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+
+
 class RegisterPayload(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
@@ -138,6 +143,7 @@ class PatientIntakePayload(BaseModel):
 
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
+    "DOCTOR_LOGIN": DoctorLoginPayload,
     "REGISTER": RegisterPayload,
     "UPDATE_PROFILE": UpdateProfilePayload,
     "GET_PROFILE": TokenPayload,

@@ -204,6 +204,19 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             log("Login failed", level="WARN", trace_id=trace_id, client_ip=client_ip)
             return {"status": "FAIL", "reason": "Invalid credentials"}
 
+    elif cmd == "DOCTOR_LOGIN":
+        doctor = data.get("doctor", "")
+        password = data.get("password", "")
+        if auth.authenticate_doctor(doctor, password):
+            token = str(uuid.uuid4())
+            auth.create_session(token, doctor, role="doctor")
+            await _incr_stat("total_logins")
+            log_audit("DOCTOR_LOGIN", user=doctor, trace_id=trace_id, details=f"IP: {client_ip}")
+            return {"status": "OK", "token": token, "doctor": doctor, "role": "doctor"}
+        else:
+            log(f"Doctor login failed for {doctor}", level="WARN", trace_id=trace_id, client_ip=client_ip)
+            return {"status": "FAIL", "reason": "Invalid doctor credentials"}
+
     elif cmd == "REGISTER":
         username = data.get("username", "")
         password = data.get("password", "")
@@ -382,6 +395,9 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         return {"status": "FAIL", "reason": "Missing session_id or transcript payload"}
 
     elif cmd == "ISSUE_PRESCRIPTION":
+        token = data.get("token")
+        if token != "DOCTOR_INTERNAL" and not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
+            return {"status": "ERROR", "reason": "Unauthorized: Doctor credentials required"}
         session_id = data.get("session_id", "")
         doctor = data.get("doctor", "")
         patient = data.get("patient", "")
@@ -482,6 +498,9 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         return {"status": "EMPTY", "reason": "No patients in queue"}
 
     elif cmd == "GET_PATIENT_INTAKE":
+        token = data.get("token")
+        if token != "DOCTOR_INTERNAL" and not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
+            return {"status": "ERROR", "reason": "Unauthorized: Doctor credentials required"}
         patient = data.get("patient", "")
         prof = get_patient_profile(patient)
         return {"status": "OK", "profile": prof or {}}

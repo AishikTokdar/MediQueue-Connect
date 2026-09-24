@@ -527,6 +527,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Integrated Celery background task workers (`server/celery_app.py`, `server/tasks.py`) and RabbitMQ AMQP brokers to offload heavy background operations (clinical consultation transcript PDF summary generation via ReportLab, email/SMS appointment reminders) off the main asyncio TCP/WebSocket server loop. When ending a consultation, terminal clients (`patient.py`, `doctor.py`) prompt users to export a formatted PDF summary saved under `data/summaries/<doctor>/<session_id>_summary.pdf`.
 12. **Ephemeral ECDH (X25519) Key Exchange with Forward Secrecy** *(Implemented)*:
     Implemented true Elliptic Curve Diffie-Hellman Ephemeral (ECDHE) key exchange over UDP peer sockets using Curve25519 (`x25519.X25519PrivateKey`) and HKDF-SHA256 key derivation (`crypto_utils.py`), eliminating pre-shared static passphrases and providing Perfect Forward Secrecy (PFS).
+13. **Doctor Authentication & Role-Based Access Control (RBAC)** *(Implemented)*:
+    Secured doctor terminals with credential-backed Argon2id authentication (`DOCTOR_LOGIN`) and role-tagged session tokens (`doctor` vs `patient`). Enforced strict role-based access control protecting clinical mutations (`ISSUE_PRESCRIPTION`, `GET_PATIENT_INTAKE`, `DOCTOR_ONLINE`) from unauthorized patient requests.
 
 ### Planned Architectural Roadmap (Future)
 

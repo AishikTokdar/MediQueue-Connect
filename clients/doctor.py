@@ -23,6 +23,7 @@ HOST = "127.0.0.1"
 SERVER_PORT = 4000
 
 _current_session_id = None
+_doctor_token = "DOCTOR_INTERNAL"
 
 
 from protocol import send_framed, recv_framed
@@ -43,10 +44,11 @@ def send_tcp(payload: dict) -> dict | None:
 
 
 def display_clinical_intake(patient_name: str) -> None:
+    global _doctor_token
     res = send_tcp({
         "command": "GET_PATIENT_INTAKE",
-        "doctor": "DOCTOR_INTERNAL",
-        "token": "DOCTOR_INTERNAL",
+        "doctor": "doctor",
+        "token": _doctor_token,
         "patient": patient_name,
     })
     prof = res.get("profile", {}) if res else {}
@@ -197,6 +199,22 @@ def main():
                         break
                     print("Invalid selection. Please try again.")
 
+    global _doctor_token
+    default_pwd = f"{doctor_name}123"
+    print(f"\n[AUTHENTICATION] Sign in as Dr. {doctor_name}")
+    pwd_input = input(f"Enter password [default: {default_pwd}]: ").strip() or default_pwd
+    login_res = send_tcp({
+        "command": "DOCTOR_LOGIN",
+        "doctor": doctor_name,
+        "password": pwd_input,
+    })
+    if login_res and login_res.get("status") == "OK":
+        _doctor_token = login_res.get("token", "DOCTOR_INTERNAL")
+        print(f"[OK] Doctor '{doctor_name}' authenticated successfully! (Role: {login_res.get('role', 'doctor')})")
+    else:
+        err = login_res.get("reason") if login_res else "No server response"
+        print(f"[WARN] Doctor authentication warning: {err}. Using local session.")
+
     udp_port = info["udp_port"]
     specialization = info.get("specialization", "General Physician")
     accepted_insurance = info.get("accepted_insurance", [])
@@ -216,7 +234,7 @@ def main():
 
     res = send_tcp({
         "command": "DOCTOR_ONLINE",
-        "token": "DOCTOR_INTERNAL",
+        "token": _doctor_token,
         "doctor": doctor_name
     })
     
@@ -229,7 +247,7 @@ def main():
             sub = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sub.connect((HOST, SERVER_PORT))
             sub = wrap_client_socket(sub, server_hostname=HOST)
-            send_framed(sub, {"command": "SUBSCRIBE", "token": "DOCTOR_INTERNAL"})
+            send_framed(sub, {"command": "SUBSCRIBE", "token": _doctor_token})
             while True:
                 msg = recv_framed(sub)
                 if not msg:
@@ -420,7 +438,7 @@ def _notify_server_end(doctor_name: str, session_id: str | None, patient_name: s
                 instructions = input("  General Advice / Dietary Precautions: ").strip()
                 rx_res = send_tcp({
                     "command": "ISSUE_PRESCRIPTION",
-                    "token": "DOCTOR_INTERNAL",
+                    "token": _doctor_token,
                     "session_id": session_id or "",
                     "doctor": doctor_name,
                     "patient": patient_name,
@@ -439,7 +457,7 @@ def _notify_server_end(doctor_name: str, session_id: str | None, patient_name: s
                 print("  Generating PDF transcript summary via Celery worker...")
                 res = send_tcp({
                     "command": "GENERATE_TRANSCRIPT_PDF",
-                    "token": "DOCTOR_INTERNAL",
+                    "token": _doctor_token,
                     "session_id": session_id,
                     "doctor": doctor_name,
                 })

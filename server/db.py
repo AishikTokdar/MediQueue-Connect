@@ -44,9 +44,14 @@ def init_db() -> None:
                 specialization TEXT NOT NULL,
                 accepted_insurance TEXT NOT NULL,
                 udp_port INTEGER NOT NULL,
-                slots TEXT NOT NULL
+                slots TEXT NOT NULL,
+                password_hash TEXT DEFAULT ''
             );
         """)
+        try:
+            conn.execute("ALTER TABLE doctors ADD COLUMN password_hash TEXT DEFAULT '';")
+        except Exception:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS bookings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
