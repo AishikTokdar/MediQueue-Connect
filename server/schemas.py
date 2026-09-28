@@ -42,6 +42,7 @@ class CancelPayload(BaseModel):
 class QueuePayload(BaseModel):
     token: str = Field(..., min_length=1)
     doctor: str = Field(..., min_length=1)
+    esi_level: Optional[int] = Field(default=5, ge=1, le=5)
 
 
 class RegisterDoctorPayload(BaseModel):
@@ -57,6 +58,7 @@ class RequestChatPayload(BaseModel):
     token: str = Field(..., min_length=1)
     doctor: str = Field(..., min_length=1)
     session_id: str = Field(..., min_length=1)
+    esi_level: Optional[int] = Field(default=5, ge=1, le=5)
 
 
 class SessionPayload(BaseModel):

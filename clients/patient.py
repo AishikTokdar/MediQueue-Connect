@@ -492,19 +492,29 @@ def main():  # noqa: C901
     _current_session_id = str(uuid.uuid4())
     session_id = _current_session_id
 
-    print(f"\nRequesting consultation with {doctor}...")
+    print("\nSelect Consultation Urgency (ESI Triage):")
+    print("  1. ESI-1: Immediate / Resuscitation")
+    print("  2. ESI-2: Emergent / Severe Pain")
+    print("  3. ESI-3: Urgent / Acute Symptoms")
+    print("  4. ESI-4: Less Urgent / Minor Ailment")
+    print("  5. ESI-5: Routine Consultation (Default)")
+    triage_in = input("Select Urgency [1-5, default 5]: ").strip()
+    esi_level = int(triage_in) if triage_in in ("1", "2", "3", "4", "5") else 5
+
+    print(f"\nRequesting consultation with {doctor} (ESI-{esi_level})...")
     tcp_send(tcp, {
         "command": "REQUEST_CHAT",
         "token": token,
         "doctor": doctor,
         "session_id": session_id,
+        "esi_level": esi_level,
     })
 
     res = tcp_recv(tcp)
 
     if res["status"] == "QUEUED":
         pos = res.get("position", "?")
-        print(f"\n  Doctor is busy. You are #{pos} in the queue.")
+        print(f"\n  Doctor is busy. You are #{pos} in the queue [Triage: ESI-{esi_level}].")
         print("  Waiting... (Press 'c' to leave the queue)\n")
 
         while True:
@@ -550,6 +560,7 @@ def main():  # noqa: C901
         "type": "HELLO",
         "patient": username,
         "session_id": session_id,
+        "esi_level": esi_level,
     }
     if crypto_available():
         try:

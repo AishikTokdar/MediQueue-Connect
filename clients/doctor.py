@@ -43,7 +43,7 @@ def send_tcp(payload: dict) -> dict | None:
         return None
 
 
-def display_clinical_intake(patient_name: str) -> None:
+def display_clinical_intake(patient_name: str, esi_level: int = 5) -> None:
     global _doctor_token
     res = send_tcp({
         "command": "GET_PATIENT_INTAKE",
@@ -52,8 +52,17 @@ def display_clinical_intake(patient_name: str) -> None:
         "patient": patient_name,
     })
     prof = res.get("profile", {}) if res else {}
+    esi_names = {
+        1: "ESI-1: CRITICAL / RESUSCITATION",
+        2: "ESI-2: EMERGENT",
+        3: "ESI-3: URGENT",
+        4: "ESI-4: LESS URGENT",
+        5: "ESI-5: ROUTINE",
+    }
+    triage_str = esi_names.get(esi_level, "ESI-5: ROUTINE")
     print("+" + "-" * 62 + "+")
     print(f"|  CLINICAL INTAKE CARD: {patient_name:40} |")
+    print(f"|  TRIAGE SEVERITY: {triage_str:44} |")
     print("+" + "-" * 62 + "+")
     dob = prof.get("dob") or "Unknown"
     bg = prof.get("blood_group") or "Not recorded"
@@ -308,9 +317,10 @@ def main():
                             "session_id": _current_session_id,
                         }).encode(), addr)
 
+                    esi_level = msg.get("esi_level", 5)
                     peers[addr] = {"name": patient_name, "session_key": s_key, "transcript": []}
                     print(f"\n[SESSION STARTED/JOINED] {patient_name}  ID: {_current_session_id}\n")
-                    display_clinical_intake(patient_name)
+                    display_clinical_intake(patient_name, esi_level=esi_level)
 
                 elif msg["type"] == "KEY_EXCHANGE":
                     enc_key = msg.get("encrypted_key")

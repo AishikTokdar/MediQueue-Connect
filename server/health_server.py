@@ -335,10 +335,11 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
                 log_audit("START_CONSULTATION", user=user, trace_id=trace_id, details=f"Doctor: {doctor}")
                 return {"status": "READY", "udp_port": udp_port}
 
-        pos = queue_mgr.enqueue(doctor, user)
+        esi_level = int(data.get("esi_level") or 5)
+        pos = queue_mgr.enqueue(doctor, user, esi_level=esi_level)
         QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
-        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
-        return {"status": "QUEUED", "position": pos, "doctor": doctor, "udp_port": udp_port}
+        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}, ESI: {esi_level}")
+        return {"status": "QUEUED", "position": pos, "doctor": doctor, "udp_port": udp_port, "esi_level": esi_level}
 
     elif cmd == "JOIN_QUEUE":
         token = data.get("token", "")
@@ -346,10 +347,11 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             return {"status": "ERROR", "reason": "Invalid token"}
         user = auth.get_user(token)
         doctor = data.get("doctor", "")
-        pos = queue_mgr.enqueue(doctor, user)
+        esi_level = int(data.get("esi_level") or 5)
+        pos = queue_mgr.enqueue(doctor, user, esi_level=esi_level)
         QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
-        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}")
-        return {"status": "QUEUED", "position": pos, "doctor": doctor}
+        log_audit("JOIN_QUEUE", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Pos: {pos}, ESI: {esi_level}")
+        return {"status": "QUEUED", "position": pos, "doctor": doctor, "esi_level": esi_level}
 
     elif cmd in ("LEAVE_QUEUE", "CANCEL_QUEUE"):
         token = data.get("token", "")
@@ -488,13 +490,15 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         if not auth.validate(token):
             return {"status": "ERROR", "reason": "Invalid token"}
         doctor = data.get("doctor", "")
-        next_patient = queue_mgr.dequeue_next(doctor)
+        next_item = queue_mgr.end_session(doctor)
         QUEUE_DEPTH.labels(doctor=doctor).set(len(queue_mgr.get_queue(doctor)))
-        if next_patient:
+        if next_item:
+            next_patient = next_item[0]
+            esi_level = next_item[2] if len(next_item) > 2 else 5
             await _incr_stat("total_chats")
-            log_audit("NEXT_PATIENT", user=doctor, trace_id=trace_id, details=f"Patient: {next_patient}")
+            log_audit("NEXT_PATIENT", user=doctor, trace_id=trace_id, details=f"Patient: {next_patient}, ESI: {esi_level}")
             prof = get_patient_profile(next_patient)
-            return {"status": "OK", "next_patient": next_patient, "profile": prof or {}}
+            return {"status": "OK", "next_patient": next_patient, "esi_level": esi_level, "profile": prof or {}}
         return {"status": "EMPTY", "reason": "No patients in queue"}
 
     elif cmd == "GET_PATIENT_INTAKE":
@@ -511,7 +515,8 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             return {"status": "ERROR", "reason": "Invalid token"}
         doctor = data.get("doctor", "")
         q = queue_mgr.get_queue(doctor)
-        return {"status": "OK", "queue": q}
+        details = queue_mgr.get_queue_details(doctor)
+        return {"status": "OK", "queue": q, "queue_details": details}
 
     elif cmd == "GET_SPECIALIZATIONS":
         specs = scheduler.get_specializations()
