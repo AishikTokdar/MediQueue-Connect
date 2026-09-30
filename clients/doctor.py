@@ -18,6 +18,7 @@ from crypto_utils import (
     crypto_available,
     wrap_client_socket,
 )
+from rudp import send_reliable_message, parse_or_ack
 
 HOST = "127.0.0.1"
 SERVER_PORT = 4000
@@ -278,7 +279,9 @@ def main():
         while True:
             try:
                 data, addr = sock.recvfrom(4096)
-                msg = json.loads(data.decode())
+                msg = parse_or_ack(sock, data, addr)
+                if not msg or "type" not in msg:
+                    continue
 
                 if msg["type"] == "HELLO":
                     if peers and _current_session_id and msg.get("session_id", "") != _current_session_id:
@@ -385,7 +388,7 @@ def main():
 
                     for peer_addr, peer_info in peers.items():
                         my_cipher = encrypt_message(reply, peer_info["session_key"]) if peer_info["session_key"] else reply
-                        sock.sendto(json.dumps({"type": "CHAT", "text": my_cipher}).encode(), peer_addr)
+                        send_reliable_message(sock, {"type": "CHAT", "text": my_cipher}, peer_addr)
 
                 elif msg["type"] == "EXIT" and addr in peers:
                     p_info = peers[addr]

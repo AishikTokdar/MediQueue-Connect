@@ -531,6 +531,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Secured doctor terminals with credential-backed Argon2id authentication (`DOCTOR_LOGIN`) and role-tagged session tokens (`doctor` vs `patient`). Enforced strict role-based access control protecting clinical mutations (`ISSUE_PRESCRIPTION`, `GET_PATIENT_INTAKE`, `DOCTOR_ONLINE`) from unauthorized patient requests.
 14. **Emergency Severity Index (ESI) Triage Priority Queue** *(Implemented)*:
     Replaced static FIFO queueing with an Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) priority scheduling engine (`queue_manager.py`). Incorporates an anti-starvation dynamic age bonus so urgent patients are prioritized immediately while preventing long wait times for routine visits.
+15. **Lightweight Reliable UDP (R-UDP) Transport with Sequence ARQ** *(Implemented)*:
+    Engineered a Reliable UDP framing and transport protocol (`rudp.py`) on top of raw datagram sockets. Implements Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ), sequence numbering, positive ACKs, MD5 packet checksums, and duplicate packet deduplication with graceful fallback to standard UDP.
 
 ### Planned Architectural Roadmap (Future)
 

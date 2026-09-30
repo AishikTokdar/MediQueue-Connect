@@ -18,6 +18,7 @@ from crypto_utils import (
     crypto_available,
     wrap_client_socket,
 )
+from rudp import send_reliable_message, parse_or_ack
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -648,7 +649,7 @@ def main():  # noqa: C901
         transcript.append({"sender": username, "text": msg, "ts": now_ts})
 
         cipher = encrypt_message(msg, _session_key) if _session_key else msg
-        udp.sendto(json.dumps({"type": "CHAT", "text": cipher}).encode(), (HOST, udp_port))
+        send_reliable_message(udp, {"type": "CHAT", "text": cipher}, (HOST, udp_port))
 
         try:
             raw, _ = udp.recvfrom(4096)
@@ -656,7 +657,7 @@ def main():  # noqa: C901
             print("[Doctor did not reply in time]")
             continue
 
-        reply = json.loads(raw.decode())
+        reply = parse_or_ack(udp, raw, (HOST, udp_port))
 
         if reply["type"] == "EXIT":
             print("\n  Doctor ended the session.")
