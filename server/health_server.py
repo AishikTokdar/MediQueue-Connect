@@ -21,6 +21,9 @@ from db import (
     get_prescription_by_session,
     save_patient_profile,
     get_patient_profile,
+    save_doctor_review,
+    get_doctor_rating_stats,
+    get_doctor_reviews_list,
 )
 from logger import log, log_audit
 from protocol import async_recv_framed, async_send_framed
@@ -417,6 +420,27 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         user = auth.get_user(token)
         rx_list = get_prescriptions_for_patient(user)
         return {"status": "OK", "prescriptions": rx_list}
+
+    elif cmd == "SUBMIT_REVIEW":
+        token = data.get("token", "")
+        if not auth.validate(token):
+            return {"status": "ERROR", "reason": "Invalid token"}
+        user = auth.get_user(token)
+        doctor = data.get("doctor", "")
+        rating = data.get("rating", 5)
+        review = data.get("review", "")
+        session_id = data.get("session_id", "")
+        review_id = save_doctor_review(doctor, user, rating, review=review, session_id=session_id)
+        scheduler.cache.invalidate_slots_cache()
+        log_audit("SUBMIT_REVIEW", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Rating: {rating}")
+        stats = get_doctor_rating_stats(doctor)
+        return {"status": "OK", "review_id": review_id, "stats": stats}
+
+    elif cmd == "GET_DOCTOR_REVIEWS":
+        doctor = data.get("doctor", "")
+        reviews = get_doctor_reviews_list(doctor)
+        stats = get_doctor_rating_stats(doctor)
+        return {"status": "OK", "doctor": doctor, "stats": stats, "reviews": reviews}
 
     elif cmd == "GENERATE_TRANSCRIPT_PDF":
         token = data.get("token")

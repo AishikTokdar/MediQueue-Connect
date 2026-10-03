@@ -533,6 +533,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Replaced static FIFO queueing with an Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) priority scheduling engine (`queue_manager.py`). Incorporates an anti-starvation dynamic age bonus so urgent patients are prioritized immediately while preventing long wait times for routine visits.
 15. **Lightweight Reliable UDP (R-UDP) Transport with Sequence ARQ** *(Implemented)*:
     Engineered a Reliable UDP framing and transport protocol (`rudp.py`) on top of raw datagram sockets. Implements Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ), sequence numbering, positive ACKs, MD5 packet checksums, and duplicate packet deduplication with graceful fallback to standard UDP.
+16. **Doctor Reviews, Star Ratings, and Satisfaction Metrics** *(Implemented)*:
+    Integrated clinical quality transparency and patient satisfaction metrics. Added `doctor_reviews` transactional datastore (`db.py`), `SUBMIT_REVIEW` and `GET_DOCTOR_REVIEWS` RPCs, real-time aggregate star rating calculations, and post-consultation patient feedback collection.
 
 ### Planned Architectural Roadmap (Future)
 

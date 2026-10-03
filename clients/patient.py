@@ -457,7 +457,10 @@ def main():  # noqa: C901
             for idx, (d, info) in enumerate(sorted_docs, 1):
                 status = "Online" if info.get("online", False) else "Offline"
                 acc_ins = ", ".join(info.get("accepted_insurance", []))
-                print(f"  {idx}. {d:12}  [{info.get('specialization','General Physician'):20}]  ({status:7})  Insurance: {acc_ins}")
+                rating = info.get("average_rating", 5.0)
+                reviews_cnt = info.get("total_reviews", 0)
+                rating_str = f"★ {rating:.1f} ({reviews_cnt} reviews)"
+                print(f"  {idx}. {d:12}  [{info.get('specialization','General Physician'):18}]  ({status:7})  {rating_str:18}  Insurance: {acc_ins}")
 
             while True:
                 doctor_input = input("Choose doctor (name or number): ").strip()
@@ -690,6 +693,27 @@ def _end_session(tcp: socket.socket, token: str, doctor: str, session_id: str, u
         tcp_recv(tcp)
     except Exception:
         pass
+
+    try:
+        want_review = input(f"\nWould you like to rate your consultation with Dr. {doctor}? (yes/no): ").strip().lower()
+        if want_review in ("yes", "y"):
+            r_in = input("Rate your experience (1-5 stars) [default 5]: ").strip()
+            rating = int(r_in) if r_in in ("1", "2", "3", "4", "5") else 5
+            comment = input("Leave feedback or review notes (optional): ").strip()
+            tcp_send(tcp, {
+                "command": "SUBMIT_REVIEW",
+                "token": token,
+                "doctor": doctor,
+                "rating": rating,
+                "review": comment,
+                "session_id": session_id,
+            })
+            rev_res = tcp_recv(tcp)
+            if rev_res and rev_res.get("status") == "OK":
+                stats = rev_res.get("stats", {})
+                print(f"  [OK] Thank you! Review submitted. Dr. {doctor} average rating is now ★ {stats.get('average_rating', 5.0)}.")
+    except Exception as e:
+        print(f"  Notice: Could not submit review: {e}")
 
     try:
         want_pdf = input("\nDo you want to export a formatted PDF summary of this consultation? (yes/no): ").strip().lower()

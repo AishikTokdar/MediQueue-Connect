@@ -96,6 +96,17 @@ def init_db() -> None:
                 FOREIGN KEY(username) REFERENCES users(username)
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS doctor_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doctor TEXT NOT NULL,
+                patient TEXT NOT NULL,
+                rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+                review TEXT,
+                session_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
 
     _seed_from_json(conn)
 
@@ -276,3 +287,56 @@ def get_patient_profile(username: str) -> Optional[Dict[str, Any]]:
             item["chronic_conditions"] = []
         return item
     return None
+
+
+def save_doctor_review(doctor: str, patient: str, rating: int, review: str = "", session_id: str = "") -> int:
+    conn = get_db_connection()
+    with conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO doctor_reviews (doctor, patient, rating, review, session_id) VALUES (?, ?, ?, ?, ?)",
+            (doctor, patient, max(1, min(5, int(rating))), review, session_id)
+        )
+        return cur.lastrowid
+
+
+def get_doctor_rating_stats(doctor: str) -> Dict[str, Any]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) as count, AVG(rating) as avg_rating FROM doctor_reviews WHERE doctor = ?",
+        (doctor,)
+    )
+    row = cur.fetchone()
+    count = row["count"] if row else 0
+    avg_rating = round(row["avg_rating"], 1) if (row and row["avg_rating"]) else 5.0
+    return {
+        "doctor": doctor,
+        "total_reviews": count,
+        "average_rating": avg_rating,
+    }
+
+
+def get_all_doctor_ratings() -> Dict[str, Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT doctor, COUNT(*) as count, AVG(rating) as avg_rating FROM doctor_reviews GROUP BY doctor"
+    )
+    res = {}
+    for row in cur.fetchall():
+        res[row["doctor"]] = {
+            "total_reviews": row["count"],
+            "average_rating": round(row["avg_rating"], 1) if row["avg_rating"] else 5.0,
+        }
+    return res
+
+
+def get_doctor_reviews_list(doctor: str, limit: int = 10) -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, doctor, patient, rating, review, created_at FROM doctor_reviews WHERE doctor = ? ORDER BY id DESC LIMIT ?",
+        (doctor, limit)
+    )
+    return [dict(r) for r in cur.fetchall()]

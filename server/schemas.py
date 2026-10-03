@@ -143,6 +143,18 @@ class PatientIntakePayload(BaseModel):
     patient: str = Field(..., min_length=1)
 
 
+class SubmitReviewPayload(BaseModel):
+    token: str = Field(..., min_length=1)
+    doctor: str = Field(..., min_length=1)
+    rating: int = Field(..., ge=1, le=5)
+    review: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class GetDoctorReviewsPayload(BaseModel):
+    doctor: str = Field(..., min_length=1)
+
+
 COMMAND_MODELS = {
     "LOGIN": LoginPayload,
     "DOCTOR_LOGIN": DoctorLoginPayload,
@@ -181,6 +193,8 @@ COMMAND_MODELS = {
     "SYNC_TRANSCRIPT": SyncTranscriptPayload,
     "ISSUE_PRESCRIPTION": IssuePrescriptionPayload,
     "GET_MY_PRESCRIPTIONS": TokenPayload,
+    "SUBMIT_REVIEW": SubmitReviewPayload,
+    "GET_DOCTOR_REVIEWS": GetDoctorReviewsPayload,
 }
 
 

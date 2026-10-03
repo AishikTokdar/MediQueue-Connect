@@ -1,7 +1,7 @@
 import json
 import threading
 from typing import Any, Dict, List, Optional
-from db import get_db_connection, init_db, add_audit_log
+from db import get_db_connection, init_db, add_audit_log, get_all_doctor_ratings
 from cache import CacheManager
 
 cache = CacheManager()
@@ -57,6 +57,7 @@ class Scheduler:
         for r in booked_rows:
             booked_map.setdefault(r["doctor"], set()).add(r["slot"])
 
+        ratings_map = get_all_doctor_ratings()
         filtered: Dict[str, Any] = {}
         for d in doc_rows:
             doc_name = d["name"]
@@ -79,11 +80,14 @@ class Scheduler:
             doc_booked = booked_map.get(doc_name, set())
             available = [s for s in all_slots if s not in doc_booked]
 
+            r_info = ratings_map.get(doc_name, {})
             filtered[doc_name] = {
                 "slots": available,
                 "accepted_insurance": acc_ins,
                 "specialization": spec,
                 "udp_port": udp_port,
+                "average_rating": r_info.get("average_rating", 5.0),
+                "total_reviews": r_info.get("total_reviews", 0),
             }
 
         cache.set_slots_cache(cache_key, filtered, ttl=60)
@@ -174,6 +178,7 @@ class Scheduler:
         cur.execute("SELECT name, specialization, accepted_insurance, udp_port, slots FROM doctors")
         rows = cur.fetchall()
 
+        ratings_map = get_all_doctor_ratings()
         result = {}
         for r in rows:
             try:
@@ -184,11 +189,14 @@ class Scheduler:
                 slots = json.loads(r["slots"])
             except Exception:
                 slots = []
+            r_info = ratings_map.get(r["name"], {})
             result[r["name"]] = {
                 "specialization": r["specialization"],
                 "accepted_insurance": acc,
                 "udp_port": r["udp_port"],
                 "slots": slots,
+                "average_rating": r_info.get("average_rating", 5.0),
+                "total_reviews": r_info.get("total_reviews", 0),
             }
         return result
 
