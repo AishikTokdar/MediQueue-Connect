@@ -19,6 +19,7 @@ from crypto_utils import (
     wrap_client_socket,
 )
 from rudp import send_reliable_message, parse_or_ack
+from file_transfer import send_file_stream, FileReceiver
 
 HOST = "127.0.0.1"
 SERVER_PORT = 4000
@@ -274,6 +275,7 @@ def main():
             os._exit(1)
 
     threading.Thread(target=push_subscriber, daemon=True).start()
+    file_receiver = FileReceiver()
 
     try:
         while True:
@@ -281,6 +283,13 @@ def main():
                 data, addr = sock.recvfrom(4096)
                 msg = parse_or_ack(sock, data, addr)
                 if not msg or "type" not in msg:
+                    continue
+
+                if msg["type"] in ("FILE_START", "FILE_CHUNK", "FILE_END") and addr in peers:
+                    s_key = peers[addr].get("session_key")
+                    saved_path = file_receiver.process_packet(msg, _current_session_id or "general", session_key=s_key)
+                    if saved_path:
+                        print(f"\n  [CLINICAL ATTACHMENT/LAB REPORT RECEIVED] Saved to:\n    {saved_path}\n")
                     continue
 
                 if msg["type"] == "HELLO":
@@ -357,7 +366,13 @@ def main():
                             f_cipher = encrypt_message(forward_msg, other_key) if other_key else forward_msg
                             sock.sendto(json.dumps({"type": "CHAT", "text": f_cipher}).encode(), peer_addr)
 
-                    reply = input("Reply (or /invite <doc>): ").strip()
+                    reply = input("Reply (or /invite <doc> /sendfile <path>): ").strip()
+
+                    if reply.startswith("/sendfile "):
+                        filepath = reply.split(" ", 1)[1].strip()
+                        for peer_addr, peer_info in peers.items():
+                            send_file_stream(sock, peer_addr, filepath, _current_session_id or "general", session_key=peer_info.get("session_key"), send_fn=send_reliable_message)
+                        continue
 
                     if reply.startswith("/invite "):
                         target_doc = reply.split()[1]

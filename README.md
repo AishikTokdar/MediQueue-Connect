@@ -535,6 +535,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Engineered a Reliable UDP framing and transport protocol (`rudp.py`) on top of raw datagram sockets. Implements Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ), sequence numbering, positive ACKs, MD5 packet checksums, and duplicate packet deduplication with graceful fallback to standard UDP.
 16. **Doctor Reviews, Star Ratings, and Satisfaction Metrics** *(Implemented)*:
     Integrated clinical quality transparency and patient satisfaction metrics. Added `doctor_reviews` transactional datastore (`db.py`), `SUBMIT_REVIEW` and `GET_DOCTOR_REVIEWS` RPCs, real-time aggregate star rating calculations, and post-consultation patient feedback collection.
+17. **Encrypted Consultation File and Lab Report Transfer (`/sendfile`)** *(Implemented)*:
+    Built an in-band clinical document sharing mechanism (`file_transfer.py`) enabling bidirectional transfer of lab reports, blood work PDFs, and clinical instructions during live consultations. Files are fragmented into Base64 chunks, encrypted using ephemeral Fernet session keys, and reassembled in `data/attachments/<session_id>/`.
 
 ### Planned Architectural Roadmap (Future)
 

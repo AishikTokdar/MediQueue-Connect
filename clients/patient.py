@@ -19,6 +19,7 @@ from crypto_utils import (
     wrap_client_socket,
 )
 from rudp import send_reliable_message, parse_or_ack
+from file_transfer import send_file_stream, FileReceiver
 
 HOST = "127.0.0.1"
 PORT = 4000
@@ -632,9 +633,10 @@ def main():  # noqa: C901
 
     enc_label = "[ENCRYPTED]" if _session_key else "[PLAINTEXT]"
     print(f"\n  {enc_label} chat with Dr. {doctor} started.")
-    print("  Type 'exit' to end the session.\n")
+    print("  Type 'exit' to end, or '/sendfile <path>' to transfer lab reports/attachments.\n")
 
     transcript: list[dict] = []
+    file_receiver = FileReceiver()
 
     while True:
         try:
@@ -647,6 +649,11 @@ def main():  # noqa: C901
             _end_session(tcp, token, doctor, session_id, username=username, transcript=transcript)
             print("Chat ended. Goodbye!")
             break
+
+        if msg.startswith("/sendfile "):
+            filepath = msg.split(" ", 1)[1].strip()
+            send_file_stream(udp, (HOST, udp_port), filepath, session_id, session_key=_session_key, send_fn=send_reliable_message)
+            continue
 
         now_ts = time.strftime("%Y-%m-%d %H:%M:%S")
         transcript.append({"sender": username, "text": msg, "ts": now_ts})
@@ -662,13 +669,19 @@ def main():  # noqa: C901
 
         reply = parse_or_ack(udp, raw, (HOST, udp_port))
 
-        if reply["type"] == "EXIT":
+        if reply.get("type") in ("FILE_START", "FILE_CHUNK", "FILE_END"):
+            saved_path = file_receiver.process_packet(reply, session_id, session_key=_session_key)
+            if saved_path:
+                print(f"\n  [FILE RECEIVED from Dr. {doctor}] Saved to:\n    {saved_path}")
+            continue
+
+        if reply.get("type") == "EXIT":
             print("\n  Doctor ended the session.")
             _end_session(tcp, token, doctor, session_id, username=username, transcript=transcript)
             break
 
-        if reply["type"] == "CHAT":
-            cipher_reply = reply["text"]
+        if reply.get("type") == "CHAT":
+            cipher_reply = reply.get("text", "")
             plaintext = decrypt_message(cipher_reply, _session_key) if _session_key else cipher_reply
             reply_ts = time.strftime("%Y-%m-%d %H:%M:%S")
             transcript.append({"sender": doctor, "text": plaintext, "ts": reply_ts})
