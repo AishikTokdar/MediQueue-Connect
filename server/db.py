@@ -62,6 +62,10 @@ def init_db() -> None:
                 UNIQUE(doctor, slot)
             );
         """)
+        try:
+            conn.execute("ALTER TABLE bookings ADD COLUMN appointment_date TEXT DEFAULT CURRENT_DATE;")
+        except Exception:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

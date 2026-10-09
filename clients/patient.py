@@ -99,9 +99,10 @@ def show_appointments(tcp: socket.socket, token: str) -> list:
 
     print("\nYour Appointments:")
     for idx, appt in enumerate(appointments, 1):
+        date_str = appt.get("appointment_date") or "Today"
         print(
             f"  {idx}. Doctor: {appt.get('doctor', '?'):12} "
-            f"[{appt.get('specialization', 'General')}]  Slot: {appt.get('slot', '?')}"
+            f"[{appt.get('specialization', 'General'):16}]  Date: {date_str:10}  Slot: {appt.get('slot', '?')}"
         )
     return appointments
 
@@ -119,8 +120,9 @@ def cancel_own_appointment(tcp: socket.socket, token: str) -> None:
         return
 
     selected = appointments[int(choice) - 1]
+    date_label = selected.get('appointment_date', 'today')
     confirm = input(
-        f"Cancel appointment with {selected['doctor']} at {selected['slot']}? (yes/no): "
+        f"Cancel appointment with {selected['doctor']} on {date_label} at {selected['slot']}? (yes/no): "
     ).strip().lower()
     if confirm not in ("yes", "y"):
         print("Cancellation aborted.")
@@ -131,6 +133,7 @@ def cancel_own_appointment(tcp: socket.socket, token: str) -> None:
         "token": token,
         "doctor": selected["doctor"],
         "slot": selected["slot"],
+        "appointment_date": selected.get("appointment_date"),
     })
     res = tcp_recv(tcp)
     if res.get("status") == "OK":
@@ -389,6 +392,8 @@ def main():  # noqa: C901
                 elif doctor in doc_list:
                     break
                 print("  Invalid selection. Please try again.")
+            today_str = time.strftime("%Y-%m-%d")
+            appt_date = input(f"Select appointment date (YYYY-MM-DD) [default: {today_str}]: ").strip() or today_str
             slot = input("Select time slot:    ").strip()
 
             tcp_send(tcp, {
@@ -396,6 +401,7 @@ def main():  # noqa: C901
                 "token": token,
                 "doctor": doctor,
                 "slot": slot,
+                "appointment_date": appt_date,
             })
             res = tcp_recv(tcp)
 
@@ -404,7 +410,8 @@ def main():  # noqa: C901
                 continue
 
             udp_port = res["udp_port"]
-            print(f"\n  [OK] Appointment booked with {doctor} at {slot}")
+            confirmed_date = res.get("appointment_date", appt_date)
+            print(f"\n  [OK] Appointment booked with Dr. {doctor} on {confirmed_date} at {slot}")
 
 
             if not yn("Do you want to chat with the doctor now? (yes/no): "):

@@ -537,6 +537,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Integrated clinical quality transparency and patient satisfaction metrics. Added `doctor_reviews` transactional datastore (`db.py`), `SUBMIT_REVIEW` and `GET_DOCTOR_REVIEWS` RPCs, real-time aggregate star rating calculations, and post-consultation patient feedback collection.
 17. **Encrypted Consultation File and Lab Report Transfer (`/sendfile`)** *(Implemented)*:
     Built an in-band clinical document sharing mechanism (`file_transfer.py`) enabling bidirectional transfer of lab reports, blood work PDFs, and clinical instructions during live consultations. Files are fragmented into Base64 chunks, encrypted using ephemeral Fernet session keys, and reassembled in `data/attachments/<session_id>/`.
+18. **Calendar Date-Based Appointment Scheduling** *(Implemented)*:
+    Extended appointment booking from static daily hours to comprehensive calendar dates (`YYYY-MM-DD`). Added `appointment_date` database column tracking (`bookings` table), date-partitioned query caching, date-filtered slot lookup, and date-based patient cancellation verification.
 
 ### Planned Architectural Roadmap (Future)
 

@@ -25,18 +25,21 @@ class TokenPayload(BaseModel):
 class GetSlotsPayload(BaseModel):
     token: str = Field(..., min_length=1)
     specialization: Optional[str] = None
+    appointment_date: Optional[str] = None
 
 
 class BookPayload(BaseModel):
     token: str = Field(..., min_length=1)
     doctor: str = Field(..., min_length=1)
     slot: str = Field(..., min_length=1)
+    appointment_date: Optional[str] = None
 
 
 class CancelPayload(BaseModel):
     token: str = Field(..., min_length=1)
     doctor: str = Field(..., min_length=1)
     slot: str = Field(..., min_length=1)
+    appointment_date: Optional[str] = None
 
 
 class QueuePayload(BaseModel):

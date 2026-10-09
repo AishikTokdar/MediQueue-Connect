@@ -258,8 +258,9 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             return {"status": "ERROR", "reason": "Invalid token"}
         user_insurance = auth.get_insurance(token)
         specialization = data.get("specialization")
-        slots = scheduler.get_slots(user_insurance, specialization)
-        return {"status": "OK", "doctors": slots}
+        appointment_date = data.get("appointment_date")
+        slots = scheduler.get_slots(user_insurance, specialization, appointment_date=appointment_date)
+        return {"status": "OK", "doctors": slots, "appointment_date": appointment_date}
 
     elif cmd in ("BOOK", "BOOK_SLOT"):
         token = data.get("token", "")
@@ -268,11 +269,12 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         user = auth.get_user(token)
         doctor = data.get("doctor", "")
         slot = data.get("slot", "")
-        resp = scheduler.book_slot(user, doctor, slot)
+        appointment_date = data.get("appointment_date")
+        resp = scheduler.book_slot(user, doctor, slot, appointment_date=appointment_date)
         if resp.get("status") == "BOOKED":
             await _incr_stat("total_bookings")
             BOOKINGS_TOTAL.inc()
-            log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}")
+            log_audit("BOOK_APPOINTMENT", user=user, trace_id=trace_id, details=f"Doctor: {doctor}, Slot: {slot}, Date: {resp.get('appointment_date')}")
             try:
                 send_email_reminder_task.delay(f"{user}@mediqueue.org", user, doctor, slot)
                 send_sms_reminder_task.delay("+15550192834", user, doctor, slot)
@@ -298,7 +300,8 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         user = auth.get_user(token)
         doctor = data.get("doctor", "")
         slot = data.get("slot", "")
-        return scheduler.remove_booking_for_patient(user, doctor, slot)
+        appointment_date = data.get("appointment_date")
+        return scheduler.remove_booking_for_patient(user, doctor, slot, appointment_date=appointment_date)
 
     elif cmd == "GET_DOCTORS":
         token = data.get("token", "")

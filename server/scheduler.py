@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from typing import Any, Dict, List, Optional
 from db import get_db_connection, init_db, add_audit_log, get_all_doctor_ratings
 from cache import CacheManager
@@ -40,8 +41,9 @@ class Scheduler:
                 return True
         return False
 
-    def get_slots(self, insurance: List[str], specialization: Optional[str] = None) -> Dict[str, Any]:
-        cache_key = f"{','.join(sorted(insurance))}:{specialization or 'ALL'}"
+    def get_slots(self, insurance: List[str], specialization: Optional[str] = None, appointment_date: Optional[str] = None) -> Dict[str, Any]:
+        target_date = appointment_date or time.strftime("%Y-%m-%d")
+        cache_key = f"{','.join(sorted(insurance))}:{specialization or 'ALL'}:{target_date}"
         cached_result = cache.get_slots_cache(cache_key)
         if cached_result is not None:
             return cached_result
@@ -51,7 +53,10 @@ class Scheduler:
         cur.execute("SELECT name, specialization, accepted_insurance, udp_port, slots FROM doctors")
         doc_rows = cur.fetchall()
 
-        cur.execute("SELECT doctor, slot FROM bookings")
+        cur.execute(
+            "SELECT doctor, slot FROM bookings WHERE COALESCE(appointment_date, date('now')) = ?",
+            (target_date,)
+        )
         booked_rows = cur.fetchall()
         booked_map: Dict[str, set] = {}
         for r in booked_rows:
@@ -86,6 +91,7 @@ class Scheduler:
                 "accepted_insurance": acc_ins,
                 "specialization": spec,
                 "udp_port": udp_port,
+                "appointment_date": target_date,
                 "average_rating": r_info.get("average_rating", 5.0),
                 "total_reviews": r_info.get("total_reviews", 0),
             }
@@ -96,7 +102,8 @@ class Scheduler:
     def get_slots_by_insurance(self, insurance: List[str]) -> Dict[str, Any]:
         return self.get_slots(insurance)
 
-    def book_slot(self, user: str, doctor: str, slot: str) -> Dict[str, Any]:
+    def book_slot(self, user: str, doctor: str, slot: str, appointment_date: Optional[str] = None) -> Dict[str, Any]:
+        target_date = appointment_date or time.strftime("%Y-%m-%d")
         conn = get_db_connection()
         with conn:
             cur = conn.cursor()
@@ -113,21 +120,25 @@ class Scheduler:
             if slot not in valid_slots:
                 return {"status": "UNAVAILABLE", "reason": "Slot does not exist"}
 
-            cur.execute("SELECT id FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
+            cur.execute(
+                "SELECT id FROM bookings WHERE doctor = ? AND slot = ? AND COALESCE(appointment_date, date('now')) = ?",
+                (doctor, slot, target_date)
+            )
             if cur.fetchone():
-                return {"status": "UNAVAILABLE", "reason": "Slot already booked"}
+                return {"status": "UNAVAILABLE", "reason": f"Slot already booked for {target_date}"}
 
             try:
                 cur.execute(
-                    "INSERT INTO bookings (doctor, slot, patient) VALUES (?, ?, ?)",
-                    (doctor, slot, user)
+                    "INSERT INTO bookings (doctor, slot, patient, appointment_date) VALUES (?, ?, ?, ?)",
+                    (doctor, slot, user, target_date)
                 )
-                add_audit_log(action="BOOK_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}")
+                add_audit_log(action="BOOK_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}, Date: {target_date}")
                 cache.invalidate_slots_cache()
                 return {
                     "status": "BOOKED",
                     "doctor": doctor,
                     "slot": slot,
+                    "appointment_date": target_date,
                     "udp_port": doc_row["udp_port"],
                     "specialization": doc_row["specialization"],
                 }
@@ -138,7 +149,7 @@ class Scheduler:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT b.doctor, b.slot, b.patient, d.specialization
+            SELECT b.doctor, b.slot, b.patient, COALESCE(b.appointment_date, date('now')) as appointment_date, d.specialization
             FROM bookings b
             LEFT JOIN doctors d ON b.doctor = d.name
             WHERE b.patient = ?
@@ -151,24 +162,37 @@ class Scheduler:
                 "doctor": r["doctor"],
                 "specialization": r["specialization"] or "General",
                 "slot": r["slot"],
+                "appointment_date": r["appointment_date"],
                 "patient": r["patient"],
             })
-        results.sort(key=lambda x: (x["doctor"].lower(), x["slot"].lower()))
+        results.sort(key=lambda x: (x["appointment_date"], x["doctor"].lower(), x["slot"].lower()))
         return results
 
-    def remove_booking_for_patient(self, user: str, doctor: str, slot: str) -> Dict[str, Any]:
+    def remove_booking_for_patient(self, user: str, doctor: str, slot: str, appointment_date: Optional[str] = None) -> Dict[str, Any]:
         conn = get_db_connection()
         with conn:
             cur = conn.cursor()
-            cur.execute("SELECT patient FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
+            if appointment_date:
+                cur.execute(
+                    "SELECT patient FROM bookings WHERE doctor = ? AND slot = ? AND COALESCE(appointment_date, date('now')) = ?",
+                    (doctor, slot, appointment_date)
+                )
+            else:
+                cur.execute("SELECT patient FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
             row = cur.fetchone()
             if not row:
                 return {"status": "FAIL", "reason": "Booking not found"}
             if row["patient"] != user:
                 return {"status": "FAIL", "reason": "You can only cancel your own appointments"}
 
-            cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
-            add_audit_log(action="CANCEL_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}")
+            if appointment_date:
+                cur.execute(
+                    "DELETE FROM bookings WHERE doctor = ? AND slot = ? AND patient = ? AND COALESCE(appointment_date, date('now')) = ?",
+                    (doctor, slot, user, appointment_date)
+                )
+            else:
+                cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ? AND patient = ?", (doctor, slot, user))
+            add_audit_log(action="CANCEL_APPOINTMENT", user=user, details=f"Doctor: {doctor}, Slot: {slot}, Date: {appointment_date or 'today'}")
             cache.invalidate_slots_cache()
             return {"status": "OK"}
 
