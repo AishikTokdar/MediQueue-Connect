@@ -539,6 +539,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Built an in-band clinical document sharing mechanism (`file_transfer.py`) enabling bidirectional transfer of lab reports, blood work PDFs, and clinical instructions during live consultations. Files are fragmented into Base64 chunks, encrypted using ephemeral Fernet session keys, and reassembled in `data/attachments/<session_id>/`.
 18. **Calendar Date-Based Appointment Scheduling** *(Implemented)*:
     Extended appointment booking from static daily hours to comprehensive calendar dates (`YYYY-MM-DD`). Added `appointment_date` database column tracking (`bookings` table), date-partitioned query caching, date-filtered slot lookup, and date-based patient cancellation verification.
+19. **Redis Pub/Sub Distributed Event Bus for Multi-Node Broadcasts** *(Implemented)*:
+    Scaled server notifications across multi-node clusters using Redis Pub/Sub (`cache.py`, `health_server.py`). Global emergency broadcasts (`ADMIN_GLOBAL_MSG`), consultation session kills (`ADMIN_KILL_SESSION`), and queue status updates are published to Redis channels and synchronized to TCP and WebSocket subscriber connections on all server instances with loopback suppression.
 
 ### Planned Architectural Roadmap (Future)
 

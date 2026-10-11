@@ -116,9 +116,11 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 
+_SERVER_NODE_ID = str(uuid.uuid4())[:8]
 _active_subs_lock = asyncio.Lock()
 _active_subs: List[asyncio.StreamWriter] = []
 _is_shutting_down = False
+_running_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 async def _incr_stat(key: str) -> None:
@@ -126,7 +128,7 @@ async def _incr_stat(key: str) -> None:
         _stats[key] += 1
 
 
-async def _broadcast_to_subs(payload: Dict[str, Any]) -> None:
+async def _dispatch_local_broadcast(payload: Dict[str, Any]) -> None:
     async with _active_subs_lock:
         to_remove = []
         for writer in _active_subs:
@@ -137,6 +139,23 @@ async def _broadcast_to_subs(payload: Dict[str, Any]) -> None:
         for w in to_remove:
             if w in _active_subs:
                 _active_subs.remove(w)
+
+
+async def _broadcast_to_subs(payload: Dict[str, Any]) -> None:
+    enriched = dict(payload)
+    enriched["_origin_node"] = _SERVER_NODE_ID
+    await _dispatch_local_broadcast(enriched)
+    try:
+        scheduler.cache.publish_event("mediqueue:broadcasts", enriched)
+    except Exception as e:
+        log(f"Redis event bus publish notice: {e}", level="WARN")
+
+
+def _handle_remote_event_bus(event: Dict[str, Any]) -> None:
+    if event.get("_origin_node") == _SERVER_NODE_ID:
+        return
+    if _running_loop and _running_loop.is_running() and not _is_shutting_down:
+        _running_loop.call_soon_threadsafe(asyncio.create_task, _dispatch_local_broadcast(event))
 
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -616,8 +635,16 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
 
 
 async def main() -> None:
-    global _is_shutting_down
+    global _is_shutting_down, _running_loop
     loop = asyncio.get_running_loop()
+    _running_loop = loop
+
+    # Subscribe to distributed Redis broadcast event bus
+    try:
+        scheduler.cache.subscribe_events("mediqueue:broadcasts", _handle_remote_event_bus)
+        log("Distributed Redis Pub/Sub broadcast event bus initialized", level="INFO")
+    except Exception as e:
+        log(f"Redis Pub/Sub subscription notice: {e}", level="WARN")
 
     # Start Prometheus telemetry exporter on port 8000
     if start_metrics_server(8000):

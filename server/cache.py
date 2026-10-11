@@ -124,3 +124,48 @@ class CacheManager:
             for k in keys_to_del:
                 self._memory_store.pop(k, None)
                 self._memory_expiry.pop(k, None)
+
+    # Distributed Pub/Sub Event Bus
+    def publish_event(self, channel: str, message: Dict[str, Any]) -> None:
+        payload = json.dumps(message)
+        if self.use_redis and self.client:
+            try:
+                self.client.publish(channel, payload)
+                return
+            except Exception:
+                self.use_redis = False
+
+        with self._lock:
+            subs = getattr(self, "_memory_subscribers", {}).get(channel, [])
+            for cb in subs:
+                try:
+                    cb(message)
+                except Exception:
+                    pass
+
+    def subscribe_events(self, channel: str, callback) -> None:
+        if self.use_redis and self.client:
+            try:
+                pubsub = self.client.pubsub()
+                pubsub.subscribe(channel)
+
+                def _listener():
+                    for msg in pubsub.listen():
+                        if msg["type"] == "message":
+                            try:
+                                raw_data = msg["data"]
+                                data = json.loads(raw_data.decode("utf-8") if isinstance(raw_data, bytes) else raw_data)
+                                callback(data)
+                            except Exception:
+                                pass
+
+                t = threading.Thread(target=_listener, daemon=True)
+                t.start()
+                return
+            except Exception:
+                self.use_redis = False
+
+        with self._lock:
+            if not hasattr(self, "_memory_subscribers"):
+                self._memory_subscribers = {}
+            self._memory_subscribers.setdefault(channel, []).append(callback)
