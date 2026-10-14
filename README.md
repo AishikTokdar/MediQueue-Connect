@@ -541,6 +541,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Extended appointment booking from static daily hours to comprehensive calendar dates (`YYYY-MM-DD`). Added `appointment_date` database column tracking (`bookings` table), date-partitioned query caching, date-filtered slot lookup, and date-based patient cancellation verification.
 19. **Redis Pub/Sub Distributed Event Bus for Multi-Node Broadcasts** *(Implemented)*:
     Scaled server notifications across multi-node clusters using Redis Pub/Sub (`cache.py`, `health_server.py`). Global emergency broadcasts (`ADMIN_GLOBAL_MSG`), consultation session kills (`ADMIN_KILL_SESSION`), and queue status updates are published to Redis channels and synchronized to TCP and WebSocket subscriber connections on all server instances with loopback suppression.
+20. **Celery Beat Automated Appointment Reminder Sweep Task** *(Implemented)*:
+    Implemented automated periodic cron orchestration via Celery Beat (`celery_app.py`, `tasks.py`). Runs every 15 minutes to sweep upcoming appointments across the next 24 hours, dispatches asynchronous Email and SMS reminder notifications, and records compliance audit trails automatically.
 
 ### Planned Architectural Roadmap (Future)
 

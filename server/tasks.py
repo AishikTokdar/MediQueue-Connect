@@ -140,9 +140,38 @@ def send_sms_reminder_task(phone_number: str, patient_name: str, doctor: str, sl
 
 
 @celery_app.task(name="server.tasks.dispatch_scheduled_reminders_task")
-def dispatch_scheduled_reminders_task() -> dict:
+def dispatch_scheduled_reminders_task(days_ahead: int = 1) -> dict:
     """
-    Celery beat/scheduled task to scan active bookings and trigger reminders.
+    Celery Beat periodic task scanning active bookings and dispatching automated reminders.
     """
-    logger.info("Scanning database for upcoming appointment reminders...")
-    return {"status": "COMPLETED", "scanned_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    logger.info(f"Scanning database for appointments scheduled within the next {days_ahead} day(s)...")
+    try:
+        from db import get_upcoming_bookings
+        upcoming = get_upcoming_bookings(days_ahead=days_ahead)
+    except Exception as e:
+        logger.error(f"Failed to query upcoming bookings: {e}")
+        return {"status": "FAILED", "reason": str(e)}
+
+    dispatched = 0
+    for b in upcoming:
+        patient = b.get("patient", "")
+        doctor = b.get("doctor", "")
+        slot = b.get("slot", "")
+        appt_date = b.get("appointment_date", "upcoming")
+        label = f"{slot} on {appt_date}"
+
+        # Trigger background email reminder
+        send_email_reminder_task.delay(f"{patient}@mediqueue.org", patient, doctor, label)
+        # Trigger background SMS reminder
+        send_sms_reminder_task.delay("+15550192834", patient, doctor, label)
+        dispatched += 1
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    logger.info(f"Automated reminder sweep completed. Processed {dispatched} appointment(s).")
+    log_audit("AUTOMATED_REMINDER_SWEEP", user="SYSTEM", details=f"Swept {dispatched} appointments scheduled within {days_ahead} days")
+    return {
+        "status": "COMPLETED",
+        "scanned_at": ts,
+        "dispatched_count": dispatched,
+        "appointments": upcoming,
+    }

@@ -22,6 +22,13 @@ celery_app.conf.update(
     task_time_limit=300,
     task_always_eager=ALWAYS_EAGER,
     task_eager_propagates=True,
+    beat_schedule={
+        "periodic-appointment-reminder-sweep-15m": {
+            "task": "server.tasks.dispatch_scheduled_reminders_task",
+            "schedule": 900.0,  # Run every 15 minutes
+            "args": (1,),  # Scan upcoming 24 hours
+        },
+    },
 )
 
 if __name__ == "__main__":

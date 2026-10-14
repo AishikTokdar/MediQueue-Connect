@@ -344,3 +344,15 @@ def get_doctor_reviews_list(doctor: str, limit: int = 10) -> List[Dict[str, Any]
         (doctor, limit)
     )
     return [dict(r) for r in cur.fetchall()]
+
+
+def get_upcoming_bookings(days_ahead: int = 2) -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, doctor, slot, patient, COALESCE(appointment_date, date('now')) as appointment_date
+        FROM bookings
+        WHERE appointment_date >= date('now') AND appointment_date <= date('now', '+' || ? || ' days')
+        ORDER BY appointment_date ASC, slot ASC
+    """, (days_ahead,))
+    return [dict(r) for r in cur.fetchall()]
