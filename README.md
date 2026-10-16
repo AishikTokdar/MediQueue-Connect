@@ -543,6 +543,8 @@ To transition MediQueue Connect from an educational simulation to a production-g
     Scaled server notifications across multi-node clusters using Redis Pub/Sub (`cache.py`, `health_server.py`). Global emergency broadcasts (`ADMIN_GLOBAL_MSG`), consultation session kills (`ADMIN_KILL_SESSION`), and queue status updates are published to Redis channels and synchronized to TCP and WebSocket subscriber connections on all server instances with loopback suppression.
 20. **Celery Beat Automated Appointment Reminder Sweep Task** *(Implemented)*:
     Implemented automated periodic cron orchestration via Celery Beat (`celery_app.py`, `tasks.py`). Runs every 15 minutes to sweep upcoming appointments across the next 24 hours, dispatches asynchronous Email and SMS reminder notifications, and records compliance audit trails automatically.
+21. **Admin Audit Log Compliance Filtering, Search, and CSV Export** *(Implemented)*:
+    Added full compliance audit search and reporting capabilities in the administration console (`server/admin.py`, `server/db.py`, `server/health_server.py`). Administrators can filter historical audit events by user, action type (e.g. `AUTH`, `BOOK`, `NEXT_PATIENT`, `REVIEW`), or keyword, review logs in tabular format, and export records to CSV format (`data/exports/audit_logs.csv`) for regulatory compliance reporting.
 
 ### Planned Architectural Roadmap (Future)
 

@@ -204,6 +204,58 @@ def manage_security() -> None:
     else:
         print(ansi(RED, f"[FAILED] Failed to unban IP {ip_to_unban}."))
 
+def manage_audit_logs() -> None:
+    print("\n" + ansi(CYAN + BOLD, "═" * 55))
+    print(ansi(CYAN + BOLD, "        AUDIT LOG SEARCH & COMPLIANCE"))
+    print(ansi(CYAN + BOLD, "═" * 55))
+    user_filter = input("Filter by user (or Enter for all): ").strip() or None
+    action_filter = input("Filter by action (e.g. AUTH, BOOK, REVIEW or Enter for all): ").strip() or None
+    keyword_filter = input("Search keyword (or Enter for all): ").strip() or None
+    limit_str = input("Max records to fetch [25]: ").strip()
+    limit = int(limit_str) if limit_str.isdigit() else 25
+
+    req = {
+        "command": "ADMIN_GET_AUDIT_LOGS",
+        "limit": limit,
+        "user": user_filter,
+        "action": action_filter,
+        "keyword": keyword_filter
+    }
+    res = tcp_send(req)
+    if not res or res.get("status") != "OK":
+        print(ansi(RED, "[FAILED] Failed to fetch audit logs."))
+        return
+
+    logs = res.get("logs", [])
+    if not logs:
+        print(ansi(YELLOW, "\n  No matching audit logs found."))
+    else:
+        print("\n" + ansi(DIM, f"  Found {len(logs)} records:"))
+        print(ansi(CYAN + BOLD, f"  {'ID':<5} {'Timestamp':<20} {'User':<14} {'Action':<16} {'Details'}"))
+        print(ansi(CYAN, "  " + "-" * 75))
+        for l in logs:
+            lid = str(l.get("id", ""))
+            ts = str(l.get("timestamp", ""))[:19]
+            u = str(l.get("user") or "-")[:12]
+            act = str(l.get("action", ""))[:15]
+            det = str(l.get("details") or "")[:35]
+            print(f"  {lid:<5} {ts:<20} {ansi(GREEN, u):<23} {ansi(YELLOW, act):<25} {det}")
+
+    export_choice = input("\nExport these results to CSV? (y/n): ").strip().lower()
+    if export_choice == "y":
+        export_req = {
+            "command": "ADMIN_EXPORT_AUDIT_CSV",
+            "limit": 1000,
+            "user": user_filter,
+            "action": action_filter,
+            "keyword": keyword_filter
+        }
+        res_exp = tcp_send(export_req)
+        if res_exp and res_exp.get("status") == "OK":
+            print(ansi(GREEN + BOLD, f"[OK] Audit logs exported to: {res_exp.get('csv_path')}"))
+        else:
+            print(ansi(RED, "[FAILED] Failed to export audit logs to CSV."))
+
 def display_menu() -> None:
     print("\n" + ansi(CYAN + BOLD, "═" * 55))
     print(ansi(CYAN + BOLD, "  ADMIN PANEL – HEALTHCARE SYSTEM"))
@@ -213,7 +265,8 @@ def display_menu() -> None:
     print("  " + ansi(YELLOW, "3.") + " View Chat History / Kill Session")
     print("  " + ansi(YELLOW, "4.") + " Global Broadcast")
     print("  " + ansi(YELLOW, "5.") + " Security Management")
-    print("  " + ansi(RED, "6.") + " Exit")
+    print("  " + ansi(YELLOW, "6.") + " Audit Log Search & CSV Export")
+    print("  " + ansi(RED, "7.") + " Exit")
     print(ansi(CYAN + BOLD, "═" * 55))
 
 def main() -> None:
@@ -223,7 +276,7 @@ def main() -> None:
     print(ansi(BOLD, "Starting Networked Admin Panel..."), flush=True)
     while True:
         display_menu()
-        choice = input("Select option (1-6): ").strip()
+        choice = input("Select option (1-7): ").strip()
 
         if choice == "1":
             res = tcp_send({"command": "ADMIN_GET_BOOKINGS"})
@@ -252,11 +305,15 @@ def main() -> None:
             manage_security()
 
         elif choice == "6":
+            manage_audit_logs()
+
+        elif choice == "7":
             print(ansi(GREEN, "\nExiting Admin Panel. Goodbye!"))
             break
 
         else:
-            print(ansi(RED, "Invalid option. Please select 1-6"))
+            print(ansi(RED, "Invalid option. Please select 1-7"))
 
 if __name__ == "__main__":
     main()
+

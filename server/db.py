@@ -191,12 +191,50 @@ def add_audit_log(action: str, user: Optional[str] = None, trace_id: Optional[st
         )
 
 
-def get_audit_logs(limit: int = 50) -> List[Dict[str, Any]]:
+def get_audit_logs(limit: int = 50, user: Optional[str] = None, action: Optional[str] = None, keyword: Optional[str] = None) -> List[Dict[str, Any]]:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, timestamp, trace_id, user, action, details FROM audit_logs ORDER BY id DESC LIMIT ?", (limit,))
+    query = "SELECT id, timestamp, trace_id, user, action, details FROM audit_logs WHERE 1=1"
+    params: List[Any] = []
+    if user:
+        query += " AND user LIKE ?"
+        params.append(f"%{user}%")
+    if action:
+        query += " AND action LIKE ?"
+        params.append(f"%{action}%")
+    if keyword:
+        query += " AND (details LIKE ? OR action LIKE ? OR trace_id LIKE ?)"
+        params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    cur.execute(query, tuple(params))
     rows = cur.fetchall()
     return [dict(r) for r in rows]
+
+
+def export_audit_logs_to_csv(filepath: Optional[str] = None, user: Optional[str] = None, action: Optional[str] = None, keyword: Optional[str] = None, limit: int = 1000) -> str:
+    import csv
+    logs = get_audit_logs(limit=limit, user=user, action=action, keyword=keyword)
+    if not filepath:
+        export_dir = os.path.join(DATA_DIR, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        filepath = os.path.join(export_dir, "audit_logs.csv")
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "timestamp", "trace_id", "user", "action", "details"])
+        for log in logs:
+            writer.writerow([
+                log.get("id"),
+                log.get("timestamp"),
+                log.get("trace_id", ""),
+                log.get("user", ""),
+                log.get("action", ""),
+                log.get("details", "")
+            ])
+    return os.path.abspath(filepath)
+
 
 
 def save_prescription(session_id: str, doctor: str, patient: str, diagnosis: str, medications: List[Dict[str, Any]], instructions: str = "") -> int:

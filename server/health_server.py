@@ -15,6 +15,7 @@ from chat_history import ChatHistory
 from crypto_utils import get_server_ssl_context
 from db import (
     get_audit_logs,
+    export_audit_logs_to_csv,
     init_db,
     save_prescription,
     get_prescriptions_for_patient,
@@ -617,11 +618,21 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         await _broadcast_to_subs({"status": "GLOBAL_MSG", "message": msg})
         return {"status": "OK"}
 
-    elif cmd == "AUDIT_LOGS":
-        token = data.get("token", "")
+    elif cmd in ("AUDIT_LOGS", "ADMIN_GET_AUDIT_LOGS"):
         limit = data.get("limit", 50)
-        logs = get_audit_logs(limit)
-        return {"status": "OK", "logs": logs}
+        user = data.get("user")
+        action = data.get("action")
+        keyword = data.get("keyword")
+        logs = get_audit_logs(limit=limit, user=user, action=action, keyword=keyword)
+        return {"status": "OK", "logs": logs, "count": len(logs)}
+
+    elif cmd == "ADMIN_EXPORT_AUDIT_CSV":
+        user = data.get("user")
+        action = data.get("action")
+        keyword = data.get("keyword")
+        limit = data.get("limit", 1000)
+        csv_path = export_audit_logs_to_csv(user=user, action=action, keyword=keyword, limit=limit)
+        return {"status": "OK", "csv_path": csv_path}
 
     elif cmd == "REGISTER_DOCTOR":
         doc = data.get("doctor", "")
