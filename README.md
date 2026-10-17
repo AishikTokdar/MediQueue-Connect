@@ -10,9 +10,10 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform Support](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-success?style=for-the-badge&logo=linux&logoColor=white)
-![Protocols](https://img.shields.io/badge/Protocols-Async%20TCP%20%2B%20UDP%20%2B%20WebSockets-orange?style=for-the-badge)
-![Security](https://img.shields.io/badge/Security-Argon2id%20%2B%20AES%20Fernet%20%2B%20TLS%20%2B%20Pydantic-red?style=for-the-badge)
+![Protocols](https://img.shields.io/badge/Protocols-Async%20TCP%20%2B%20R--UDP%20%2B%20WebSockets-orange?style=for-the-badge)
+![Security](https://img.shields.io/badge/Security-Argon2id%20%2B%20ECDH%20X25519%20%2B%20TLS-red?style=for-the-badge)
 ![Database](https://img.shields.io/badge/Database-SQLite%20WAL%20Mode%20%2B%20Redis-blueviolet?style=for-the-badge)
+![Tasks](https://img.shields.io/badge/Task%20Queue-Celery%20%2B%20RabbitMQ-37814A?style=for-the-badge&logo=celery&logoColor=white)
 ![Observability](https://img.shields.io/badge/Observability-Prometheus%20%2Fmetrics-yellow?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/Tests-Pytest%20Suite%20Passed-brightgreen?style=for-the-badge)
@@ -34,7 +35,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 10. [Feature Tour & Interactive Demos](#feature-tour--interactive-demos)
 11. [Security Features & Controls](#security-features--controls)
 12. [Troubleshooting & OS Compatibility Notes](#troubleshooting--os-compatibility-notes)
-13. [Future Improvements](#future-improvements)
+13. [Future Improvements & Production Status](#future-improvements--production-status)
 14. [Contributors](#contributors)
 15. [License](#license)
 
@@ -499,57 +500,42 @@ Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ran
 
 ## Future Improvements & Production Status
 
-To transition MediQueue Connect from an educational simulation to a production-grade application, several architectural improvements have been implemented, with future microservice roadmap items planned:
+To transition MediQueue Connect from an educational prototype into an enterprise-ready telemedicine network, 21 comprehensive architectural features have been implemented across the backend, networking, clinical, and security layers. Additional roadmap enhancements are detailed below:
 
-### Implemented Architectural Features (Completed)
+### Implemented Architectural Features
 
-1. **Cross-Platform Queue Management** *(Implemented)*:
-   Implemented a unified non-blocking input layer (`check_cancel_key`) in `clients/patient.py`. Windows uses `msvcrt`, while Linux and macOS use `select.select` with POSIX `termios` cbreak mode for queue cancellation without blocking the thread.
-2. **TLS/SSL for TCP Socket Communication** *(Implemented)*:
-   Wrapped the main TCP control listener (`health_server.py`) and all client applications (`patient.py`, `doctor.py`, `admin.py`, `dashboard.py`, `performance_analysis.py`) using Python's `ssl` module. The system automatically generates RSA-2048 self-signed TLS certificates stored in `data/certs/`, securing all control plane operations against eavesdropping.
-3. **Dynamic Doctor Registration** *(Implemented)*:
-   Implemented full dynamic doctor registration protocol (`REGISTER_DOCTOR` command). Doctors can launch `clients/doctor.py` without hardcoded configuration files, specify their specialization, choose accepted insurance policies, and assign listening UDP ports dynamically at boot time.
-4. **Persistent Database Integration (SQLite WAL)** *(Implemented)*:
-   Replaced local JSON storage with an ACID-compliant SQLite database (`mediqueue.db`) operating in Write-Ahead Logging (`WAL`) mode with foreign key constraints.
-5. **Length-Prefixed Binary Protocol Framing** *(Implemented)*:
-   Implemented a 4-byte big-endian length-prefixed binary framing protocol (`protocol.py`) preventing TCP packet fragmentation and buffer boundary errors across network chunks.
-6. **Argon2id Auth & Pydantic Schema Validation** *(Implemented)*:
-   Enforced Pydantic v2 input validation schemas and salt-protected Argon2id password hashing (`argon2-cffi`).
-7. **Redis Session & Slot Query Caching** *(Implemented)*:
-   Integrated Redis session token storage (`session:<token>`) with auto-TTL expiration and write-through slot query caching with automatic in-memory fallback.
-8. **Prometheus Operational Telemetry Exporter** *(Implemented)*:
-   Exposed HTTP `/metrics` endpoint on port `8000` tracking request counters, active connection gauges, queue depth metrics, and latency histograms.
-9. **WebSocket API Gateway Bridge** *(Implemented)*:
-   Engineered a FastAPI / Uvicorn WebSocket bridge (`ws://127.0.0.1:8080/ws`) translating browser WebSocket JSON frames into 4-byte length-prefixed binary TCP packets.
-10. **Docker Multi-Container Orchestration** *(Implemented)*:
-    Containerized Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter using `Dockerfile` and `docker-compose.yml`.
-11. **Distributed Asynchronous Task Queue (Celery / RabbitMQ) & PDF Consultation Exporter** *(Implemented)*:
-    Integrated Celery background task workers (`server/celery_app.py`, `server/tasks.py`) and RabbitMQ AMQP brokers to offload heavy background operations (clinical consultation transcript PDF summary generation via ReportLab, email/SMS appointment reminders) off the main asyncio TCP/WebSocket server loop. When ending a consultation, terminal clients (`patient.py`, `doctor.py`) prompt users to export a formatted PDF summary saved under `data/summaries/<doctor>/<session_id>_summary.pdf`.
-12. **Ephemeral ECDH (X25519) Key Exchange with Forward Secrecy** *(Implemented)*:
-    Implemented true Elliptic Curve Diffie-Hellman Ephemeral (ECDHE) key exchange over UDP peer sockets using Curve25519 (`x25519.X25519PrivateKey`) and HKDF-SHA256 key derivation (`crypto_utils.py`), eliminating pre-shared static passphrases and providing Perfect Forward Secrecy (PFS).
-13. **Doctor Authentication & Role-Based Access Control (RBAC)** *(Implemented)*:
-    Secured doctor terminals with credential-backed Argon2id authentication (`DOCTOR_LOGIN`) and role-tagged session tokens (`doctor` vs `patient`). Enforced strict role-based access control protecting clinical mutations (`ISSUE_PRESCRIPTION`, `GET_PATIENT_INTAKE`, `DOCTOR_ONLINE`) from unauthorized patient requests.
-14. **Emergency Severity Index (ESI) Triage Priority Queue** *(Implemented)*:
-    Replaced static FIFO queueing with an Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) priority scheduling engine (`queue_manager.py`). Incorporates an anti-starvation dynamic age bonus so urgent patients are prioritized immediately while preventing long wait times for routine visits.
-15. **Lightweight Reliable UDP (R-UDP) Transport with Sequence ARQ** *(Implemented)*:
-    Engineered a Reliable UDP framing and transport protocol (`rudp.py`) on top of raw datagram sockets. Implements Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ), sequence numbering, positive ACKs, MD5 packet checksums, and duplicate packet deduplication with graceful fallback to standard UDP.
-16. **Doctor Reviews, Star Ratings, and Satisfaction Metrics** *(Implemented)*:
-    Integrated clinical quality transparency and patient satisfaction metrics. Added `doctor_reviews` transactional datastore (`db.py`), `SUBMIT_REVIEW` and `GET_DOCTOR_REVIEWS` RPCs, real-time aggregate star rating calculations, and post-consultation patient feedback collection.
-17. **Encrypted Consultation File and Lab Report Transfer (`/sendfile`)** *(Implemented)*:
-    Built an in-band clinical document sharing mechanism (`file_transfer.py`) enabling bidirectional transfer of lab reports, blood work PDFs, and clinical instructions during live consultations. Files are fragmented into Base64 chunks, encrypted using ephemeral Fernet session keys, and reassembled in `data/attachments/<session_id>/`.
-18. **Calendar Date-Based Appointment Scheduling** *(Implemented)*:
-    Extended appointment booking from static daily hours to comprehensive calendar dates (`YYYY-MM-DD`). Added `appointment_date` database column tracking (`bookings` table), date-partitioned query caching, date-filtered slot lookup, and date-based patient cancellation verification.
-19. **Redis Pub/Sub Distributed Event Bus for Multi-Node Broadcasts** *(Implemented)*:
-    Scaled server notifications across multi-node clusters using Redis Pub/Sub (`cache.py`, `health_server.py`). Global emergency broadcasts (`ADMIN_GLOBAL_MSG`), consultation session kills (`ADMIN_KILL_SESSION`), and queue status updates are published to Redis channels and synchronized to TCP and WebSocket subscriber connections on all server instances with loopback suppression.
-20. **Celery Beat Automated Appointment Reminder Sweep Task** *(Implemented)*:
-    Implemented automated periodic cron orchestration via Celery Beat (`celery_app.py`, `tasks.py`). Runs every 15 minutes to sweep upcoming appointments across the next 24 hours, dispatches asynchronous Email and SMS reminder notifications, and records compliance audit trails automatically.
-21. **Admin Audit Log Compliance Filtering, Search, and CSV Export** *(Implemented)*:
-    Added full compliance audit search and reporting capabilities in the administration console (`server/admin.py`, `server/db.py`, `server/health_server.py`). Administrators can filter historical audit events by user, action type (e.g. `AUTH`, `BOOK`, `NEXT_PATIENT`, `REVIEW`), or keyword, review logs in tabular format, and export records to CSV format (`data/exports/audit_logs.csv`) for regulatory compliance reporting.
+- **Cross-Platform Non-Blocking Queue Management**: Built cross-platform non-blocking user input detection (`clients/patient.py`) utilizing `msvcrt` on Windows and POSIX `select.select`/`termios` on Linux/macOS for responsive queue cancellation (`c`) without stalling threads.
+- **TLS/SSL Encrypted Socket Transport**: Hardened the core TCP control plane (`health_server.py`) and all clients (`patient.py`, `doctor.py`, `admin.py`, `dashboard.py`) using Python's `ssl` module with automated local RSA-2048 certificate generation.
+- **Dynamic Doctor Registration Protocol**: Implemented dynamic registration (`REGISTER_DOCTOR`) enabling doctor terminals to self-register their specialization, accepted insurance plans, and dedicated UDP ports at runtime without static config dependencies.
+- **ACID-Compliant SQLite Persistence (WAL Mode)**: Replaced flat JSON files with a transactional SQLite database (`mediqueue.db`) operating in Write-Ahead Logging (`WAL`) mode with foreign key integrity.
+- **Length-Prefixed Binary Protocol Framing**: Designed a 4-byte big-endian length-prefixed framing layer (`protocol.py`) eliminating TCP packet fragmentation, message truncation, and boundary errors across all network sockets.
+- **Argon2id Authentication & Pydantic Schema Validation**: Protected user/doctor credentials using memory-hard Argon2id hashing (`argon2-cffi`) with automatic legacy migration, and validated all incoming RPC payloads with Pydantic v2 schemas (`schemas.py`).
+- **Redis Session Caching & Write-Through Query Caching**: Integrated distributed Redis caching (`cache.py`) for ephemeral session tokens (`session:<token>`) with automatic TTL expiration, alongside write-through slot query caching with thread-safe memory fallback.
+- **Prometheus Telemetry & Observability Exporter**: Integrated an operational metrics exporter on port `8000` (`metrics.py`) exposing counters, active connection gauges, queue depth gauges, and latency histograms for Prometheus scraping.
+- **FastAPI / Uvicorn WebSocket Gateway Bridge**: Built an asynchronous WebSocket gateway (`websocket_gateway.py`) translating browser-compatible JSON WebSocket frames into framed binary TCP RPCs.
+- **Docker Multi-Container Orchestration**: Structured full-stack containerization via `Dockerfile` and `docker-compose.yml` orchestrating Health Server, Redis, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus.
+- **Distributed Celery Background Worker & PDF Consultation Export**: Offloaded CPU-heavy tasks via Celery and RabbitMQ (`celery_app.py`, `tasks.py`), including ReportLab-powered PDF consultation summary generation (`data/summaries/`) and async notification delivery.
+- **Ephemeral ECDH (X25519) Key Exchange with Forward Secrecy**: Replaced pre-shared static keys with peer-to-peer Curve25519 Elliptic Curve Diffie-Hellman key exchange and HKDF-SHA256 key derivation (`crypto_utils.py`), guaranteeing Perfect Forward Secrecy (PFS) for consultation sessions.
+- **Doctor Authentication & Role-Based Access Control (RBAC)**: Added credential-backed doctor authentication (`DOCTOR_LOGIN`) and role-based access control protecting clinical endpoints (`ISSUE_PRESCRIPTION`, `GET_PATIENT_INTAKE`, `DOCTOR_ONLINE`) from unauthorized patient requests.
+- **Emergency Severity Index (ESI) Triage Priority Queue**: Replaced static FIFO queueing with an Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) scheduling engine (`queue_manager.py`) featuring an anti-starvation dynamic age bonus.
+- **Reliable UDP (R-UDP) Transport with Sequence ARQ**: Engineered an R-UDP transport layer (`rudp.py`) providing Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ), sequence numbering, positive ACKs, MD5 checksum validation, and deduplication over datagram sockets.
+- **Doctor Reviews, Star Ratings & Satisfaction Metrics**: Implemented patient feedback and doctor rating telemetry (`SUBMIT_REVIEW`, `GET_DOCTOR_REVIEWS`), persisting ratings in SQLite with running averages and post-consultation evaluation prompts.
+- **Encrypted Consultation File and Lab Report Transfer (`/sendfile`)**: Developed in-band file transfer (`file_transfer.py`) allowing bidirectional sharing of medical records and lab PDFs during active consultations, fragmented into Base64 chunks and encrypted with session keys.
+- **Calendar Date-Based Appointment Scheduling**: Extended appointment scheduling from static daily hours to comprehensive calendar dates (`YYYY-MM-DD`), featuring date-partitioned query caching, date-filtered slot queries, and date-aware booking validation.
+- **Redis Pub/Sub Distributed Event Bus for Multi-Node Broadcasts**: Deployed a Redis Pub/Sub broadcast bus (`cache.py`, `health_server.py`) synchronizing global broadcasts (`ADMIN_GLOBAL_MSG`), emergency session kills (`ADMIN_KILL_SESSION`), and queue status updates across multi-server instances.
+- **Celery Beat Automated Appointment Reminder Sweep**: Implemented periodic background sweep tasks via Celery Beat (`celery_app.py`, `tasks.py`) running every 15 minutes to proactively notify patients of upcoming 24-hour appointments via email/SMS with compliance audit logging.
+- **Admin Audit Log Compliance Filtering, Search & CSV Export**: Upgraded the administrative console (`server/admin.py`, `server/db.py`) with parameterized audit log search (filtering by user, action type, and keywords) and one-click compliance CSV export (`data/exports/audit_logs.csv`).
 
-### Planned Architectural Roadmap (Future)
+### Planned Architectural Roadmap (Future Improvements)
 
-1. **Real-time Audio/Video Streaming (RTP/RTCP)**:
-   Extend the consultation layer to support voice and video by packetizing microphone/camera streams and transmitting them over UDP, managed by a session signaling protocol.
+- **Real-Time Audio & Video Streaming (WebRTC / RTP/RTCP)**: Peer-to-peer audio and video consultation streaming with adaptive bitrate streaming (Opus audio codec, VP8/H.264 video codec) and STUN/TURN ICE candidate negotiation over the control plane.
+- **HL7 FHIR Clinical Data Exchange Standards**: Native Fast Healthcare Interoperability Resources (FHIR R4/R5) JSON REST APIs for seamless electronic health record (EHR/EMR like Epic, Cerner) data exchange and patient chart synchronization.
+- **Decentralized Doctor Identity & Verifiable Credentials (W3C DID)**: Cryptographic verification of medical licenses and board certifications using W3C Verifiable Credentials and decentralized identifiers, mitigating credential spoofing.
+- **Offline Edge Emergency Consultation Gateway & Mesh Routing**: Local mesh networking (Bluetooth Low Energy / Wi-Fi Direct) for remote or disaster zones, enabling field triage and store-and-forward sync once WAN connectivity is restored.
+- **AI-Assisted Clinical Scribe & Automated SOAP Notes**: Background LLM/Whisper inference pipeline to transcribe consultations into structured Subjective, Objective, Assessment, Plan (SOAP) clinical records with doctor sign-off.
+- **Automated Health Insurance Claim Adjudication & Pre-Authorization Bridge**: Real-time X12 EDI 270/271 eligibility inquiry and 278 prior authorization exchange engine for automated co-pay validation and claim submission.
+- **End-to-End Post-Quantum Cryptography (ML-KEM / Kyber Key Exchange)**: Quantum-resistant key encapsulation mechanisms (NIST FIPS 203 ML-KEM / Kyber-768) alongside X25519 for long-term clinical data confidentiality against "harvest-now, decrypt-later" adversaries.
+- **Geo-Distributed Anycast DNS & Edge Health Gateway Clustering**: Global BGP Anycast routing and multi-region health cluster synchronization to minimize consultation latency for remote tele-health clinics.
 
 ---
 
