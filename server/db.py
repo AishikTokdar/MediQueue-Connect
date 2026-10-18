@@ -58,12 +58,39 @@ def init_db() -> None:
                 doctor TEXT NOT NULL,
                 slot TEXT NOT NULL,
                 patient TEXT NOT NULL,
+                appointment_date TEXT DEFAULT CURRENT_DATE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(doctor, slot)
+                UNIQUE(doctor, slot, appointment_date)
             );
         """)
         try:
             conn.execute("ALTER TABLE bookings ADD COLUMN appointment_date TEXT DEFAULT CURRENT_DATE;")
+        except Exception:
+            pass
+        try:
+            schema_row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='bookings'").fetchone()
+            if schema_row and "UNIQUE(doctor, slot)" in schema_row[0]:
+                cols = [col[1] for col in conn.execute("PRAGMA table_info(bookings)").fetchall()]
+                date_expr = "COALESCE(appointment_date, date('now'))" if "appointment_date" in cols else "date('now')"
+                conn.execute("PRAGMA foreign_keys=OFF;")
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS bookings_migrated (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        doctor TEXT NOT NULL,
+                        slot TEXT NOT NULL,
+                        patient TEXT NOT NULL,
+                        appointment_date TEXT DEFAULT CURRENT_DATE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(doctor, slot, appointment_date)
+                    );
+                """)
+                conn.execute(f"""
+                    INSERT OR IGNORE INTO bookings_migrated (id, doctor, slot, patient, appointment_date, created_at)
+                    SELECT id, doctor, slot, patient, {date_expr}, created_at FROM bookings;
+                """)
+                conn.execute("DROP TABLE bookings;")
+                conn.execute("ALTER TABLE bookings_migrated RENAME TO bookings;")
+                conn.execute("PRAGMA foreign_keys=ON;")
         except Exception:
             pass
         conn.execute("""
@@ -390,7 +417,8 @@ def get_upcoming_bookings(days_ahead: int = 2) -> List[Dict[str, Any]]:
     cur.execute("""
         SELECT id, doctor, slot, patient, COALESCE(appointment_date, date('now')) as appointment_date
         FROM bookings
-        WHERE appointment_date >= date('now') AND appointment_date <= date('now', '+' || ? || ' days')
+        WHERE COALESCE(appointment_date, date('now')) >= date('now') 
+          AND COALESCE(appointment_date, date('now')) <= date('now', '+' || ? || ' days')
         ORDER BY appointment_date ASC, slot ASC
     """, (days_ahead,))
     return [dict(r) for r in cur.fetchall()]

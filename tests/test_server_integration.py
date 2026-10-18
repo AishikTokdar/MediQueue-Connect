@@ -17,8 +17,11 @@ def setup_test_env(tmp_path, monkeypatch):
     init_db()
 
 
-@pytest.mark.asyncio
-async def test_full_server_async_request_flow():
+def test_full_server_async_request_flow():
+    asyncio.run(_test_full_server_async_request_flow())
+
+
+async def _test_full_server_async_request_flow():
     server = await asyncio.start_server(handle_client, "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
 

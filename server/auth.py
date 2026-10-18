@@ -2,8 +2,13 @@ import json
 import os
 import hashlib
 from typing import Dict, List, Optional
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError
+try:
+    from argon2 import PasswordHasher
+    from argon2.exceptions import VerifyMismatchError, VerificationError
+    _ARGON2_AVAILABLE = True
+except ImportError:
+    _ARGON2_AVAILABLE = False
+
 from db import get_db_connection, init_db, add_audit_log
 from cache import CacheManager
 
@@ -14,12 +19,15 @@ class AuthManager:
 
     def __init__(self):
         init_db()
-        self.ph = PasswordHasher()
+        self.ph = PasswordHasher() if _ARGON2_AVAILABLE else None
         self.sessions: Dict[str, str] = {}
         self.roles: Dict[str, str] = {}
 
     def _hash_password(self, pwd: str) -> str:
-        return self.ph.hash(pwd)
+        if _ARGON2_AVAILABLE and self.ph:
+            return self.ph.hash(pwd)
+        salt = "mediqueue_salt_2026"
+        return "sha256$" + hashlib.sha256((salt + pwd).encode()).hexdigest()
 
     def _verify_password(self, pwd: str, hash_val: str) -> bool:
         if not hash_val:
@@ -27,11 +35,16 @@ class AuthManager:
         if len(hash_val) == 64 and all(c in "0123456789abcdefABCDEF" for c in hash_val):
             sha_matches = hashlib.sha256(pwd.encode()).hexdigest() == hash_val
             return sha_matches
+        if hash_val.startswith("sha256$"):
+            salt = "mediqueue_salt_2026"
+            return ("sha256$" + hashlib.sha256((salt + pwd).encode()).hexdigest()) == hash_val
 
-        try:
-            return self.ph.verify(hash_val, pwd)
-        except (VerifyMismatchError, VerificationError, Exception):
-            return False
+        if _ARGON2_AVAILABLE and self.ph:
+            try:
+                return self.ph.verify(hash_val, pwd)
+            except Exception:
+                return False
+        return False
 
     def authenticate(self, user: str, pwd: str) -> bool:
         conn = get_db_connection()

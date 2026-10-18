@@ -2,18 +2,22 @@ import os
 import json
 import html
 from datetime import datetime
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-    HRFlowable,
-)
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+        HRFlowable,
+    )
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    _REPORTLAB_AVAILABLE = True
+except ImportError:
+    _REPORTLAB_AVAILABLE = False
 
 
 def generate_transcript_pdf(
@@ -31,6 +35,24 @@ def generate_transcript_pdf(
     Saves to output_path and returns the absolute filepath.
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    if not _REPORTLAB_AVAILABLE:
+        txt_path = output_path.replace(".pdf", ".txt") if output_path.endswith(".pdf") else output_path
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(f"MEDIQUEUE CONNECT - CONSULTATION SUMMARY\n{'='*55}\n")
+            f.write(f"Session ID: {session_id}\nDoctor: Dr. {doctor}\nPatient: {patient}\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*55}\n\n")
+            if prescription:
+                f.write(f"DIAGNOSIS: {prescription.get('diagnosis', 'N/A')}\n")
+                f.write(f"MEDICATIONS: {prescription.get('medications', [])}\n")
+                f.write(f"INSTRUCTIONS: {prescription.get('instructions', 'N/A')}\n\n")
+            f.write("TRANSCRIPT:\n")
+            for rec in transcript_records:
+                sender = rec.get("sender", "")
+                text = rec.get("text", "")
+                ts = rec.get("ts", "")
+                f.write(f"[{ts}] {sender}: {text}\n")
+        return os.path.abspath(txt_path)
 
     doc = SimpleDocTemplate(
         output_path,

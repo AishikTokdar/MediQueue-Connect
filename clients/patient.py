@@ -280,6 +280,9 @@ def main():  # noqa: C901
             res = tcp_recv(tcp)
             
             if res["status"] == "OK":
+                if "token" not in res:
+                    tcp_send(tcp, {"command": "LOGIN", "username": username, "password": password})
+                    res = tcp_recv(tcp)
                 break
             print(f"  Registration failed: {res.get('reason', 'unknown')}.\n")
             

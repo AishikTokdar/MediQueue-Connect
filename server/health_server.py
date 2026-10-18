@@ -245,8 +245,11 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
         password = data.get("password", "")
         insurance = data.get("insurance", [])
         if auth.register(username, password, insurance):
+            token = str(uuid.uuid4())
+            auth.create_session(token, username)
+            await _incr_stat("total_logins")
             log_audit("USER_REGISTER", user=username, trace_id=trace_id)
-            return {"status": "OK"}
+            return {"status": "OK", "token": token, "username": username, "insurance": insurance}
         else:
             return {"status": "FAIL", "reason": "Username already exists"}
 
@@ -595,7 +598,8 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
     elif cmd in ("CLEAR_BOOKING", "ADMIN_REMOVE_BOOKING"):
         doctor = data.get("doctor", "")
         slot = data.get("slot", "")
-        success = scheduler.remove_booking(doctor, slot)
+        appointment_date = data.get("appointment_date")
+        success = scheduler.remove_booking(doctor, slot, appointment_date=appointment_date)
         return {"status": "OK" if success else "FAIL"}
 
     elif cmd == "ADMIN_KILL_SESSION":

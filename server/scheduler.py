@@ -13,6 +13,7 @@ class Scheduler:
     def __init__(self):
         init_db()
         self.lock = threading.Lock()
+        self.cache = cache
 
     def get_all_bookings(self) -> Dict[str, Dict[str, str]]:
         conn = get_db_connection()
@@ -30,13 +31,19 @@ class Scheduler:
             result[doc][slot] = patient
         return result
 
-    def remove_booking(self, doctor: str, slot: str) -> bool:
+    def remove_booking(self, doctor: str, slot: str, appointment_date: Optional[str] = None) -> bool:
         conn = get_db_connection()
         with conn:
             cur = conn.cursor()
-            cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
+            if appointment_date:
+                cur.execute(
+                    "DELETE FROM bookings WHERE doctor = ? AND slot = ? AND COALESCE(appointment_date, date('now')) = ?",
+                    (doctor, slot, appointment_date)
+                )
+            else:
+                cur.execute("DELETE FROM bookings WHERE doctor = ? AND slot = ?", (doctor, slot))
             if cur.rowcount > 0:
-                add_audit_log(action="ADMIN_CANCEL_BOOKING", user="ADMIN", details=f"Doctor: {doctor}, Slot: {slot}")
+                add_audit_log(action="ADMIN_CANCEL_BOOKING", user="ADMIN", details=f"Doctor: {doctor}, Slot: {slot}, Date: {appointment_date or 'ALL'}")
                 cache.invalidate_slots_cache()
                 return True
         return False

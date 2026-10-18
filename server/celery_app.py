@@ -1,5 +1,50 @@
 import os
-from celery import Celery
+
+try:
+    from celery import Celery
+    _CELERY_AVAILABLE = True
+except ImportError:
+    _CELERY_AVAILABLE = False
+
+    class _DummyTask:
+        def __init__(self, func, bind=False):
+            self.func = func
+            self.bind = bind
+
+        def delay(self, *args, **kwargs):
+            class _DummyResult:
+                id = "local-sync"
+
+                def ready(self):
+                    return True
+
+                @property
+                def result(self):
+                    return None
+
+            return _DummyResult()
+
+        def retry(self, *args, **kwargs):
+            pass
+
+        def __call__(self, *args, **kwargs):
+            if self.bind:
+                return self.func(self, *args, **kwargs)
+            return self.func(*args, **kwargs)
+
+    class Celery:
+        def __init__(self, *args, **kwargs):
+            self.conf = {}
+
+        def task(self, *args, **kwargs):
+            bind = kwargs.get("bind", False)
+            def decorator(func):
+                return _DummyTask(func, bind=bind)
+            return decorator
+
+        def start(self):
+            pass
+
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672//")
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")

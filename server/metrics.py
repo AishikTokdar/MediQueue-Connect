@@ -1,4 +1,36 @@
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+try:
+    from prometheus_client import Counter, Gauge, Histogram, start_http_server
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
+
+    class _DummyMetric:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def labels(self, *args, **kwargs):
+            return self
+
+        def inc(self, *args, **kwargs):
+            pass
+
+        def dec(self, *args, **kwargs):
+            pass
+
+        def set(self, *args, **kwargs):
+            pass
+
+        def observe(self, *args, **kwargs):
+            pass
+
+        def time(self):
+            import contextlib
+            return contextlib.nullcontext()
+
+    Counter = Gauge = Histogram = _DummyMetric
+
+    def start_http_server(port):
+        pass
 
 REQUESTS_TOTAL = Counter(
     "mediqueue_requests_total",
