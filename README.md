@@ -2,7 +2,7 @@
 
 > **A Secure, Multi-Client Healthcare Consultation & Queue Management Platform built over TCP, UDP, and WebSockets.**
 
-MediQueue Connect simulates a real-life hospital workflow. It enables patients to discover doctors, book appointments based on specialization and insurance, wait in a FIFO queue if the doctor is busy, and establish secure, encrypted live UDP chat consultations. An integrated Admin Console, Live Metrics Dashboard, Performance Benchmarking tool, **Async Event-Driven Core**, **Length-Prefixed Binary Protocol Framing**, **Transactional SQLite Storage (WAL Mode)**, **Argon2id Password Security**, **Redis Session/Query Caching**, **Prometheus Telemetry Exporter**, **WebSocket Gateway Bridge**, and **Docker Compose Orchestration** provide a full-fledged demonstration of network and production backend engineering concepts.
+MediQueue Connect simulates a real-life hospital workflow. It enables patients to discover doctors, book appointments based on specialization, calendar dates, and insurance, wait in a priority triage queue if the doctor is busy, and establish secure, encrypted live UDP chat consultations. An integrated Admin Console, Live Metrics Dashboard, Performance Benchmarking tool, **Async Event-Driven Core**, **Length-Prefixed Binary Protocol Framing**, **Transactional SQLite Storage (WAL Mode)**, **Argon2id Password Security**, **Redis Session/Query Caching**, **Prometheus Telemetry Exporter**, **WebSocket Gateway Bridge**, and **Docker Compose Orchestration** provide a full-fledged demonstration of network and production backend engineering concepts.
 
 ---
 
@@ -27,9 +27,9 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 2. [Key Architectural Highlights](#key-architectural-highlights)
 3. [System Architecture](#system-architecture)
 4. [Core Computer Network & Backend Concepts Used](#core-computer-network--backend-concepts-used)
-5. [File and Folder Structure](#file-and-folder-structure)
+5. [Project Structure](#project-structure)
 6. [Installation & Requirements](#installation--requirements)
-7. [Pre-configured Accounts (For Testing)](#pre-configured-accounts-for-testing)
+7. [Pre-configured Accounts & Doctor Specializations (For Testing)](#pre-configured-accounts--doctor-specializations-for-testing)
 8. [Automated Test Suite](#automated-test-suite)
 9. [Step-by-Step Run Guide](#step-by-step-run-guide)
 10. [Feature Tour & Interactive Demos](#feature-tour--interactive-demos)
@@ -45,14 +45,15 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 MediQueue Connect bridges the gap between theoretical computer networking concepts and practical software engineering. Developed as part of the **Computer Communication and Networks (CCN/CN) curriculum**, this application leverages custom client-server application-layer protocols to orchestrate:
 
-- **Patient Portal**: Profile registration, login, comprehensive health profile management (blood group, drug/food allergies, chronic medical conditions), filterable scheduling based on health insurance eligibility, and real-time appointment booking.
-- **Doctor Terminal**: Online/Offline toggle, instant clinical intake card display (blood group, allergies, chronic ailments), live consultation channel, and a multi-peer clinical invite system.
-- **Queue Orchestration Engine**: FIFO-based waiting room that handles doctor-busy states, and automatically notifies queued patients when it is their turn.
-- **Secure Chat Layer**: A hybrid messaging channel that negotiates session keys via TCP, routes low-latency Fernet-encrypted conversation messages over UDP, and synchronizes live consultation transcripts directly into audit-grade JSONL logs.
+- **Patient Portal**: Profile registration, instant session token acquisition, comprehensive health profile management (blood group, drug/food allergies, chronic medical conditions), filterable scheduling based on health insurance eligibility, calendar date-based appointment scheduling, and real-time appointment booking.
+- **Doctor Terminal**: Online/Offline toggle, credential authentication (`DOCTOR_LOGIN`), instant clinical intake card display (blood group, allergies, chronic ailments), live consultation channel, and a multi-peer clinical invite system.
+- **Queue Orchestration Engine**: Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) triage priority queue with continuous anti-starvation dynamic priority age deduction (`-0.25` effective level boost per 60 seconds), automatic turn notification, and non-blocking queue exit.
+- **Secure Chat & Media Layer**: A hybrid messaging channel that negotiates ephemeral Curve25519 ECDH session keys via TCP with Perfect Forward Secrecy, routes low-latency Fernet-encrypted conversation messages over Reliable UDP (R-UDP) with sequence ARQ and positive ACKs, supports in-band encrypted consultation file and lab report transfers (`/sendfile`), and synchronizes live consultation transcripts directly into audit-grade JSONL logs.
 - **Digital Prescription (Rx) Engine**: Enables physicians to generate structured digital prescriptions with diagnosis, dosage schedules, dietary advice, and authentic verification tokens rendered directly into PDF exports.
 - **WebSocket Gateway Bridge**: A FastAPI / Uvicorn bridge (`/ws`) translating browser WebSocket JSON frames into 4-byte length-prefixed binary TCP packets.
+- **Doctor Reviews & Feedback Engine**: Post-consultation patient evaluation system collecting 1–5 star ratings and clinical feedback stored in SQLite with running averages.
 - **Prometheus Telemetry Exporter**: Real-time HTTP `/metrics` exporter exposing request counters, active connection gauges, doctor queue depth stats, and p95/p99 latency histograms.
-- **Admin Command Center**: Database manager allowing admins to delete bookings, audit session transcripts, unban IPs, inspect audit trails, and broadcast messages to all connected entities.
+- **Admin Command Center**: Database manager allowing admins to delete bookings, audit session transcripts, unban IPs, inspect audit trails with keyword filtering, export audit logs to CSV, and broadcast messages to all connected entities.
 - **Live Monitor Dashboard**: Uptime tracking, message/booking statistics counters, and live visualization of doctor workloads, patient queues, and banned IPs.
 - **Performance Evaluator**: Side-by-side RTT latency analyzer comparing TCP control traffic against UDP echo streams.
 
@@ -163,12 +164,20 @@ MediQueue Connect is a sandbox for demonstrating several primary networking and 
    - A token-bucket algorithm monitors incoming IP addresses. Request frequency exceeding defined thresholds triggers a temporary 5-minute IP ban, simulating firewalls and intrusion prevention systems.
 7. **Transactional SQLite Database (WAL Mode)**:
    - Persistent storage uses an embedded SQLite database (`mediqueue.db`) operating in Write-Ahead Logging (`WAL`) mode with foreign keys enabled, providing ACID guarantees and crash recovery.
-8. **Argon2id Password Hashing**:
-   - Passwords are secured using state-of-the-art Argon2id hashing (`argon2-cffi`), with automatic migration for legacy password hashes.
+8. **Argon2id Password Hashing & Salted Fallback**:
+   - Passwords are secured using state-of-the-art Argon2id hashing (`argon2-cffi`) with automatic legacy migration and graceful salted SHA-256 fallback when dependencies are missing.
 9. **Prometheus Operational Telemetry**:
    - Real-time operational metrics are exposed via HTTP `/metrics` on port `8000` (`metrics.py`), including request counters, active connection gauges, queue depth stats, and p95/p99 latency histograms.
 10. **Docker Compose Multi-Container Orchestration**:
     - Containerized using `Dockerfile` and `docker-compose.yml` orchestrating Health Server, Redis cache, RabbitMQ, Celery Worker, WebSocket Gateway, and Prometheus exporter.
+11. **Reliable UDP (R-UDP) Transport with Sequence ARQ**:
+    - Custom Stop-and-Wait / Go-Back-N Automatic Repeat reQuest (ARQ) framing with 32-bit sequence numbers, positive ACK packets, MD5 payload checksum verification, and duplicate packet deduplication implemented over raw UDP datagrams (`rudp.py`).
+12. **Perfect Forward Secrecy via Ephemeral ECDH (X25519)**:
+    - Peer-to-peer Elliptic Curve Diffie-Hellman ephemeral key negotiation on Curve25519 with HKDF-SHA256 key derivation (`crypto_utils.py`), guaranteeing that historical session transcripts cannot be decrypted even if long-term credentials are compromised.
+13. **Dynamic Priority Queueing & Anti-Starvation Scheduling**:
+    - Emergency Severity Index (ESI Levels 1–5: Resuscitation to Routine) triage queue management (`queue_manager.py`) with continuous anti-starvation age deduction (`-0.25` effective ESI level boost per 60 seconds of waiting).
+14. **In-Band Encrypted Medical File & Report Transfer**:
+    - Chunked binary-to-Base64 file transfer protocol (`file_transfer.py`) streaming encrypted clinical documents and lab reports directly across the R-UDP session socket.
 
 ---
 
@@ -202,9 +211,11 @@ MediQueue-Connect/
 │   ├── protocol.py             # 4-byte length-prefixed binary framing protocol helper
 │   ├── auth.py                 # Handles Argon2id hashed password storage & Redis session caching
 │   ├── scheduler.py            # SQLite-backed appointment manager & slot query cache
-│   ├── queue_manager.py        # Handles doctor busy states & FIFO queues
+│   ├── queue_manager.py        # Handles doctor busy states, ESI triage & dynamic priority queues
+│   ├── rudp.py                 # Reliable UDP (R-UDP) transport with sequence ARQ and ACKs
+│   ├── file_transfer.py        # Encrypted in-band consultation file & lab report transfer
 │   ├── chat_history.py         # Logs session transcripts to JSONL format
-│   ├── crypto_utils.py         # Symmetric Fernet encryption helpers & key exchange
+│   ├── crypto_utils.py         # Ephemeral ECDH X25519 & symmetric Fernet encryption helpers
 │   ├── logger.py               # Structured JSON logger & audit trail recorder
 │   ├── admin.py                # Command-line interface for administrative operations
 │   ├── dashboard.py            # Live-updating ANSI terminal dashboard
@@ -222,8 +233,11 @@ MediQueue-Connect/
     ├── mediqueue.db            # SQLite database (ACID storage for users, doctors, bookings, audit logs)
     ├── server_logs.txt         # Server runtime event log
     ├── notifications.log       # Audit log for background Email/SMS notification dispatches
+    ├── certs/                  # Auto-generated TLS certificates (server.crt, server.key)
     ├── chat_history/           # Folder containing audit trails for patient-doctor conversations
-    └── summaries/              # Formatted PDF consultation summary exports
+    ├── summaries/              # Formatted PDF consultation summary exports
+    ├── attachments/            # Storage for encrypted consultation attachments and lab reports
+    └── exports/                # Compliance audit log CSV exports
 ```
 
 ---
@@ -263,39 +277,39 @@ pip install -r requirements.txt
 ## Pre-configured Accounts & Doctor Specializations (For Testing)
 
 ### Patient Accounts
-To log in immediately, use any of the pre-configured patients. The default password is identical to the username:
+To log in immediately, use any of the pre-configured patients. Pre-seeded accounts use `pass<N>` as default credentials, and newly registered accounts authenticate with their chosen password:
 
 | Username | Default Password | Covered Specializations | Pre-registered Insurance |
 | :--- | :--- | :--- | :--- |
-| `patient1` | `patient1` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
-| `patient2` | `patient2` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
-| `patient3` | `patient3` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
-| `patient4` | `patient4` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
-| `patient5` | `patient5` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
-| `patient6` | `patient6` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
+| `patient1` | `pass1` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
+| `patient2` | `pass2` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
+| `patient3` | `pass3` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
+| `patient4` | `pass4` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA` |
+| `patient5` | `pass5` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceB` |
+| `patient6` | `pass6` | General Physician, Cardiologist, Dermatologist, Neurologist, Orthopedic, Pediatrician | `insuranceA`, `insuranceB` |
 
 ### Doctor Registry & Specialization Matrix (`data/mediqueue.db` / `data/doctors.json`)
 
-Doctors are categorized into specific specializations and accept different insurance policies:
+Doctors are categorized into specific specializations and accept different insurance policies. Doctors authenticate via `DOCTOR_LOGIN` with default credentials `<doctor_id>123` (e.g., `doctor1123` for `doctor1`):
 
-| Doctor ID | Specialization | Accepted Insurance | UDP Port | Available Slots |
-| :--- | :--- | :--- | :--- | :--- |
-| `doctor1` | General Physician | `insuranceA`, `insuranceB` | `5001` | `10AM`, `11AM` |
-| `doctor5` | General Physician | `insuranceA` | `5005` | `9AM`, `12PM` |
-| `doctor6` | General Physician | `insuranceB` | `5006` | `2PM`, `5PM` |
-| `doctor2` | Cardiologist | `insuranceB` | `5002` | `12PM`, `1PM` |
-| `doctor7` | Cardiologist | `insuranceA` | `5007` | `9AM`, `10AM` |
-| `doctor8` | Cardiologist | `insuranceA`, `insuranceB` | `5008` | `2PM`, `3PM`, `4PM` |
-| `doctor3` | Dermatologist | `insuranceA` | `5003` | `2PM`, `3PM` |
-| `doctor9` | Dermatologist | `insuranceB` | `5009` | `11AM`, `12PM` |
-| `doctor10` | Dermatologist | `insuranceA`, `insuranceB` | `5010` | `9AM`, `1PM`, `5PM` |
-| `doctor4` | Neurologist | `insuranceA`, `insuranceB` | `5004` | `9AM`, `10AM`, `4PM` |
-| `doctor11` | Neurologist | `insuranceA` | `5011` | `10AM`, `11AM` |
-| `doctor12` | Neurologist | `insuranceB` | `5012` | `1PM`, `2PM`, `3PM` |
-| `doctor13` | Orthopedic | `insuranceA` | `5013` | `9AM`, `11AM` |
-| `doctor14` | Orthopedic | `insuranceB` | `5014` | `2PM`, `4PM` |
-| `doctor15` | Pediatrician | `insuranceA`, `insuranceB` | `5015` | `10AM`, `1PM`, `3PM` |
-| `doctor16` | Pediatrician | `insuranceA` | `5016` | `9AM`, `12PM` |
+| Doctor ID | Default Password | Specialization | Accepted Insurance | UDP Port | Available Slots |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `doctor1` | `doctor1123` | General Physician | `insuranceA`, `insuranceB` | `5001` | `10AM`, `11AM` |
+| `doctor5` | `doctor5123` | General Physician | `insuranceA` | `5005` | `9AM`, `12PM` |
+| `doctor6` | `doctor6123` | General Physician | `insuranceB` | `5006` | `2PM`, `5PM` |
+| `doctor2` | `doctor2123` | Cardiologist | `insuranceB` | `5002` | `12PM`, `1PM` |
+| `doctor7` | `doctor7123` | Cardiologist | `insuranceA` | `5007` | `9AM`, `10AM` |
+| `doctor8` | `doctor8123` | Cardiologist | `insuranceA`, `insuranceB` | `5008` | `2PM`, `3PM`, `4PM` |
+| `doctor3` | `doctor3123` | Dermatologist | `insuranceA` | `5003` | `2PM`, `3PM` |
+| `doctor9` | `doctor9123` | Dermatologist | `insuranceB` | `5009` | `11AM`, `12PM` |
+| `doctor10` | `doctor10123` | Dermatologist | `insuranceA`, `insuranceB` | `5010` | `9AM`, `1PM`, `5PM` |
+| `doctor4` | `doctor4123` | Neurologist | `insuranceA`, `insuranceB` | `5004` | `9AM`, `10AM`, `4PM` |
+| `doctor11` | `doctor11123` | Neurologist | `insuranceA` | `5011` | `10AM`, `11AM` |
+| `doctor12` | `doctor12123` | Neurologist | `insuranceB` | `5012` | `1PM`, `2PM`, `3PM` |
+| `doctor13` | `doctor13123` | Orthopedic | `insuranceA` | `5013` | `9AM`, `11AM` |
+| `doctor14` | `doctor14123` | Orthopedic | `insuranceB` | `5014` | `2PM`, `4PM` |
+| `doctor15` | `doctor15123` | Pediatrician | `insuranceA`, `insuranceB` | `5015` | `10AM`, `1PM`, `3PM` |
+| `doctor16` | `doctor16123` | Pediatrician | `insuranceA` | `5016` | `9AM`, `12PM` |
 
 *Note: You can also register new doctors dynamically using `python clients/doctor.py`.*
 
@@ -423,34 +437,45 @@ docker compose up --build -d
 ## Feature Tour & Interactive Demos
 
 ### 1. Booking a Slot & Patient Scheduling
-1. Run `patient.py` and log in as `patient1` (password: `patient1`).
+1. Run `patient.py` and log in as `patient1` (password: `pass1`).
 2. Choose **Option 1: Book appointment**.
 3. Select a specialization (e.g., *General Physician*) or type `0` to list all doctors.
 4. The patient client will list only doctors who accept `insuranceA` (matching `patient1`'s profile).
-5. Select a doctor (e.g. `doctor1`) and type an available slot (e.g., `10AM`).
-6. Confirm booking. The client will query if you want to chat now. Choosing `yes` immediately launches the consultation routing.
+5. Specify an appointment date (press Enter for today's date `YYYY-MM-DD` or input a future date).
+6. Select a doctor (e.g. `doctor1`) and type an available slot (e.g., `10AM`).
+7. Confirm booking. The client will query if you want to chat now. Choosing `yes` immediately launches the consultation routing.
 
-### 2. Real-time Queue Orchestration
-If a doctor is already consulting a patient, other incoming patients are placed in a queue:
-1. Ensure `doctor1` is online.
-2. Start Patient Terminal A (`patient1`), start a chat with `doctor1`. An active UDP chat begins.
+### 2. Real-time Queue Orchestration & ESI Triage
+If a doctor is already consulting a patient, incoming patients are triaged into a priority waiting queue:
+1. Ensure `doctor1` is online (`python clients/doctor.py doctor1`).
+2. Start Patient Terminal A (`patient1`), start a chat with `doctor1`. An active consultation session begins.
 3. Start Patient Terminal B (`patient2`), attempt to chat with `doctor1`.
-4. Patient B will receive a message: `Doctor is busy. You are #1 in the queue.`
-5. On Patient Terminal B, you will see a waiting screen. Pressing `c` sends a `CANCEL_QUEUE` packet to exit.
-6. When Patient A types `exit`, the chat session ends.
-7. The server automatically processes the queue, sends a `TURN_READY` TCP packet to Patient B, and connects Patient B to `doctor1`'s UDP socket automatically.
+4. Patient B is prompted to select an **Emergency Severity Index (ESI)** urgency level (Level 1: Critical/Resuscitation to Level 5: Routine).
+5. Patient B receives a queue ticket: `Doctor is busy. You are #1 in the queue (ESI Level X).`
+6. Anti-starvation scheduling continuously adjusts effective queue position (deducting `0.25` every 60 seconds) so routine patients are never permanently starved by later emergent arrivals.
+7. Pressing `c` sends a non-blocking `CANCEL_QUEUE` packet to exit gracefully.
+8. When Patient A ends the consultation, the server dispatches a `TURN_READY` TCP packet to Patient B, automatically establishing their consultation channel.
 
-### 3. Consultation Layer (Encrypted vs Plaintext)
-- **If `cryptography` is installed**:
-  - Upon starting a UDP session, the doctor client generates an ephemeral Fernet key.
-  - The doctor client encrypts this session key using a shared secret passphrase (`blue-scrubs-and-cold-coffee-2026`) and sends it to the patient.
-  - The patient client decrypts the session key. All subsequent conversation messages (`type: CHAT`) are sent as ciphertext.
-  - The Patient terminal displays an `Encrypted chat with Dr. <name> started` banner.
-- **If `cryptography` is NOT installed**:
-  - The handshake falls back to plaintext.
-  - Sockets transmit raw text, and the patient terminal displays a `Plaintext chat with Dr. <name> started` warning.
+### 3. Consultation Layer (PFS Encryption & Reliable UDP)
+- **Perfect Forward Secrecy (ECDH X25519)**:
+  - Upon starting a consultation session, the doctor and patient endpoints execute an ephemeral Curve25519 Diffie-Hellman key exchange.
+  - A unique session key is derived via HKDF-SHA256, guaranteeing Perfect Forward Secrecy (PFS).
+- **Reliable UDP (R-UDP) Transport**:
+  - Chat packets are framed with 32-bit sequence numbers and verified via MD5 checksums over UDP datagrams.
+  - Automatic Repeat reQuest (ARQ) retransmits dropped frames, and duplicate datagrams are discarded automatically.
+- **Graceful Plaintext Fallback**:
+  - If cryptographic libraries are unavailable, sockets gracefully negotiate plaintext transmission with clear terminal warnings.
 
-### 4. Doctor-to-Doctor Invite Feature (Collaboration)
+### 4. Encrypted In-Band File & Lab Report Transfer
+During an active consultation, either party can transfer clinical reports or lab PDFs:
+1. In the chat prompt, type:
+   ```text
+   /sendfile <path_to_file>
+   ```
+2. The file is read, Base64-encoded, fragmented into R-UDP chunks, and encrypted with the session key.
+3. The receiving endpoint verifies chunk integrity, reassembles the file, and saves it into `data/attachments/`.
+
+### 5. Doctor-to-Doctor Invite Feature (Collaboration)
 While engaged in a live chat, doctors can invite offline/online colleagues for a joint consultation:
 1. During an active chat with a patient, the doctor can type:
    ```text
@@ -459,11 +484,25 @@ While engaged in a live chat, doctors can invite offline/online colleagues for a
 2. If the second doctor is online (on their designated port), they receive the invitation packet and join the active chat session.
 3. Messages are broadcasted across all participating endpoints.
 
-### 5. Admin global controls
-Using `admin.py`:
-- **Global Broadcast**: Select **Option 4** and type a message. All connected doctors and patients will instantly receive a highlighted server broadcast alert in their consoles.
-- **Kill Session**: Select **Option 3**, view active sessions, and type `kill <session_number>`. The server will transmit a termination packet to the subscriber thread of both patient and doctor, ending the consultation immediately.
-- **View Audit Logs**: Select **Option 5** to view immutable security audit records stored in SQLite.
+### 6. Digital Prescriptions (Rx) & PDF Consultation Summaries
+When a consultation concludes:
+1. The doctor client prompts to issue a digital prescription (`ISSUE_PRESCRIPTION`) specifying diagnosis, medications (name, dosage, frequency, duration), and dietary instructions. Prescriptions are cryptographically signed with unique verification IDs and saved to SQLite.
+2. The doctor client prompts to generate a formatted PDF consultation summary (`GENERATE_TRANSCRIPT_PDF`). A background Celery worker assembles the chat transcript and prescription into a medical PDF saved to `data/summaries/`.
+
+### 7. Patient Doctor Reviews & Star Ratings
+After a consultation ends:
+1. The patient client prompts the patient to evaluate their experience:
+   ```text
+   Rate Dr. doctor1 (1-5 stars): 5
+   Consultation feedback / comments: Dr. doctor1 was very thorough and attentive.
+   ```
+2. The review is stored in SQLite (`reviews` table) and factors into the doctor's public satisfaction metrics.
+
+### 8. Admin Global Controls & Compliance Auditing
+Using `python server/admin.py`:
+- **Global Broadcast**: Select **Option 4** and type a message. All connected doctors and patients instantly receive a highlighted server broadcast alert in their consoles.
+- **Kill Session**: Select **Option 3**, view active sessions, and type `kill <session_number>`. The server transmits a termination packet to the subscriber thread of both patient and doctor, ending the consultation immediately.
+- **Audit Log Search & CSV Export**: Select **Option 5** to view immutable security audit records stored in SQLite, filter by user or action keyword, and export compliance audit reports to `data/exports/audit_logs.csv`.
 
 ---
 
@@ -500,7 +539,7 @@ Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ran
 
 ## Future Improvements & Production Status
 
-To transition MediQueue Connect from an educational prototype into an enterprise-ready telemedicine network, 21 comprehensive architectural features have been implemented across the backend, networking, clinical, and security layers. Additional roadmap enhancements are detailed below:
+To transition MediQueue Connect from an educational prototype into an enterprise-ready telemedicine network, 25 comprehensive architectural features have been implemented across the backend, networking, clinical, and security layers. Additional roadmap enhancements are detailed below:
 
 ### Implemented Architectural Features
 
@@ -525,6 +564,10 @@ To transition MediQueue Connect from an educational prototype into an enterprise
 - **Redis Pub/Sub Distributed Event Bus for Multi-Node Broadcasts**: Deployed a Redis Pub/Sub broadcast bus (`cache.py`, `health_server.py`) synchronizing global broadcasts (`ADMIN_GLOBAL_MSG`), emergency session kills (`ADMIN_KILL_SESSION`), and queue status updates across multi-server instances.
 - **Celery Beat Automated Appointment Reminder Sweep**: Implemented periodic background sweep tasks via Celery Beat (`celery_app.py`, `tasks.py`) running every 15 minutes to proactively notify patients of upcoming 24-hour appointments via email/SMS with compliance audit logging.
 - **Admin Audit Log Compliance Filtering, Search & CSV Export**: Upgraded the administrative console (`server/admin.py`, `server/db.py`) with parameterized audit log search (filtering by user, action type, and keywords) and one-click compliance CSV export (`data/exports/audit_logs.csv`).
+- **Automated Database Schema Migration & Multi-Date Constraint Handling**: Upgraded SQLite persistence (`server/db.py`) with automatic schema migration from legacy `UNIQUE(doctor, slot)` to `UNIQUE(doctor, slot, appointment_date)`, allowing the same daily time slot to be booked across distinct calendar dates without schema collision.
+- **Date-Specific Slot Cancellation & Parameter Binding**: Enhanced appointment cancellation protocols (`CANCEL_MY_BOOKING`, `server/scheduler.py`) to accept optional `appointment_date` parameters, enabling patients and administrators to cancel date-specific bookings while leaving future appointments intact.
+- **Zero-Dependency Lightweight Fallback Engine**: Hardened backend modules with multi-tier graceful degradation (salted SHA-256 fallback when `argon2-cffi` is absent, structured text fallback when `reportlab` is uninstalled, and in-memory mock metrics when `prometheus_client` is missing) ensuring full portability across environments.
+- **Instant Registration Session Handshake**: Streamlined user registration (`REGISTER`, `server/health_server.py`) to return authenticated session tokens and insurance profiles immediately, allowing CLI and Web clients to transition into authenticated workflows without redundant login round-trips.
 
 ### Planned Architectural Roadmap (Future Improvements)
 
