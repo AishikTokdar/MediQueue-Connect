@@ -177,7 +177,6 @@ def main():
         print("\n  Could not collect TCP latency data. Is the server running?")
         return
 
-    # Trim to equal length in case UDP dropped some packets.
     min_len = min(len(tcp_lat), len(udp_lat))
     tcp_lat = tcp_lat[:min_len]
     udp_lat = udp_lat[:min_len]

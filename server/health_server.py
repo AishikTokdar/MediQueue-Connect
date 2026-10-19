@@ -180,7 +180,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             cmd = data.get("command", "UNKNOWN")
             log(f"Received command: {cmd}", level="INFO", trace_id=trace_id, client_ip=client_ip)
 
-            # Validate input schema
             is_valid, err_msg, validated_payload = validate_request_payload(cmd, data)
             if not is_valid:
                 log(f"Invalid payload for {cmd}: {err_msg}", level="WARN", trace_id=trace_id)
@@ -482,7 +481,6 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
             task = generate_session_summary_pdf_task.delay(session_id, doctor, patient)
             CELERY_TASKS_TOTAL.labels(task_name="generate_session_summary_pdf_task", status="ENQUEUED").inc()
             
-            # Check if task executed synchronously (eager mode)
             result_info = None
             if task.ready():
                 result_info = task.result
@@ -654,14 +652,12 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     _running_loop = loop
 
-    # Subscribe to distributed Redis broadcast event bus
     try:
         scheduler.cache.subscribe_events("mediqueue:broadcasts", _handle_remote_event_bus)
         log("Distributed Redis Pub/Sub broadcast event bus initialized", level="INFO")
     except Exception as e:
         log(f"Redis Pub/Sub subscription notice: {e}", level="WARN")
 
-    # Start Prometheus telemetry exporter on port 8000
     if start_metrics_server(8000):
         log("Prometheus operational telemetry exporter started on http://127.0.0.1:8000/metrics", level="INFO")
 

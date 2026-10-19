@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime
 
-# Path setup for flexible import resolutions
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -12,7 +11,6 @@ SERVER_DIR = os.path.abspath(os.path.dirname(__file__))
 if SERVER_DIR not in sys.path:
     sys.path.insert(0, SERVER_DIR)
 
-# Set up logging for background tasks
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mediqueue.tasks")
 
@@ -160,9 +158,7 @@ def dispatch_scheduled_reminders_task(days_ahead: int = 1) -> dict:
         appt_date = b.get("appointment_date", "upcoming")
         label = f"{slot} on {appt_date}"
 
-        # Trigger background email reminder
         send_email_reminder_task.delay(f"{patient}@mediqueue.org", patient, doctor, label)
-        # Trigger background SMS reminder
         send_sms_reminder_task.delay("+15550192834", patient, doctor, label)
         dispatched += 1
 

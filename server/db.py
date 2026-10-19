@@ -143,7 +143,6 @@ def init_db() -> None:
 
 
 def _seed_from_json(conn: sqlite3.Connection) -> None:
-    # Seed Users
     users_path = os.path.join(DATA_DIR, "users.json")
     if os.path.exists(users_path):
         cur = conn.cursor()
@@ -162,7 +161,6 @@ def _seed_from_json(conn: sqlite3.Connection) -> None:
             except Exception as e:
                 print(f"Error seeding users from JSON: {e}")
 
-    # Seed Doctors
     doctors_path = os.path.join(DATA_DIR, "doctors.json")
     if os.path.exists(doctors_path):
         cur = conn.cursor()
@@ -183,7 +181,6 @@ def _seed_from_json(conn: sqlite3.Connection) -> None:
             except Exception as e:
                 print(f"Error seeding doctors from JSON: {e}")
 
-    # Seed Bookings
     bookings_path = os.path.join(DATA_DIR, "bookings.json")
     if os.path.exists(bookings_path):
         cur = conn.cursor()

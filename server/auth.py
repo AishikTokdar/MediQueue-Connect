@@ -75,7 +75,6 @@ class AuthManager:
 
         current_hash = row["password_hash"] or ""
         if not current_hash:
-            # First-time initialization for seeded doctor profiles
             new_hash = self._hash_password(pwd)
             with conn:
                 conn.execute("UPDATE doctors SET password_hash = ? WHERE name = ?", (new_hash, doctor_name))

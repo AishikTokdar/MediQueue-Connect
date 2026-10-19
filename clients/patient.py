@@ -458,7 +458,6 @@ def main():  # noqa: C901
                 print("\nNo doctors match your insurance coverage and specialization criteria.")
                 continue
 
-            # Sort: online first (True > False), then specialization alphabetical, then name
             sorted_docs = sorted(
                 all_doctors.items(),
                 key=lambda x: (not x[1].get("online", False), x[1].get("specialization", "").lower(), x[0].lower())

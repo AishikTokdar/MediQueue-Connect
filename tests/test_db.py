@@ -22,16 +22,12 @@ def test_auth_manager_register_and_login():
     pwd = "SecurePassword123!"
     insurance = ["Aetna", "BlueCross"]
 
-    # Register
     assert auth.register(user, pwd, insurance) is True
-    # Duplicate registration should fail
     assert auth.register(user, pwd, insurance) is False
 
-    # Login
     assert auth.authenticate(user, pwd) is True
     assert auth.authenticate(user, "WrongPassword") is False
 
-    # Insurance lookup
     token = "test_token_123"
     auth.create_session(token, user)
     assert auth.validate(token) is True
@@ -47,29 +43,23 @@ def test_scheduler_doctor_and_booking():
     udp_port = 5005
     slots = ["9AM", "10AM"]
 
-    # Register doctor
     reg_resp = sched.register_doctor(doc_name, spec, insurance, udp_port, slots)
     assert reg_resp["status"] == "OK"
 
-    # Get slots
     available = sched.get_slots(insurance, spec)
     assert doc_name in available
     assert available[doc_name]["slots"] == ["9AM", "10AM"]
 
-    # Book slot
     book_resp = sched.book_slot("test_patient_1", doc_name, "9AM")
     assert book_resp["status"] == "BOOKED"
 
-    # Slot should no longer be available
     available_after = sched.get_slots(insurance, spec)
     assert "9AM" not in available_after[doc_name]["slots"]
     assert "10AM" in available_after[doc_name]["slots"]
 
-    # Duplicate booking should fail
     dup_resp = sched.book_slot("test_patient_2", doc_name, "9AM")
     assert dup_resp["status"] == "UNAVAILABLE"
 
-    # Remove booking
     cancel_resp = sched.remove_booking_for_patient("test_patient_1", doc_name, "9AM")
     assert cancel_resp["status"] == "OK"
 

@@ -209,7 +209,6 @@ def validate_request_payload(command: str, data: dict) -> Tuple[bool, Optional[s
     """
     model_cls = COMMAND_MODELS.get(command.upper())
     if not model_cls:
-        # Commands without mandatory payload schema (e.g. GET_STATS, GET_SPECIALIZATIONS)
         return True, None, data
 
     try:

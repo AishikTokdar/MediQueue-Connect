@@ -28,7 +28,6 @@ class CacheManager:
             except Exception:
                 self.use_redis = False
 
-    # Session Cache
     def set_session(self, token: str, user: str, ttl: int = 3600) -> None:
         key = f"session:{token}"
         if self.use_redis and self.client:
@@ -75,7 +74,6 @@ class CacheManager:
             self._memory_store.pop(key, None)
             self._memory_expiry.pop(key, None)
 
-    # Doctor Slots Cache
     def get_slots_cache(self, key: str) -> Optional[Dict[str, Any]]:
         full_key = f"slots_cache:{key}"
         if self.use_redis and self.client:
@@ -125,7 +123,6 @@ class CacheManager:
                 self._memory_store.pop(k, None)
                 self._memory_expiry.pop(k, None)
 
-    # Distributed Pub/Sub Event Bus
     def publish_event(self, channel: str, message: Dict[str, Any]) -> None:
         payload = json.dumps(message)
         if self.use_redis and self.client:

@@ -48,7 +48,6 @@ def test_generate_session_summary_pdf_task():
     doctor = "doctor1"
     patient = "patient1"
     
-    # Write a dummy transcript JSONL
     history_dir = os.path.join(os.path.dirname(__file__), "..", "data", "chat_history", doctor)
     os.makedirs(history_dir, exist_ok=True)
     jsonl_path = os.path.join(history_dir, f"{session_id}.jsonl")

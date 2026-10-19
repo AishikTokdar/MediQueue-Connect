@@ -76,7 +76,6 @@ def remove_booking(bookings: dict) -> bool:
         print(ansi(RED, "Error: Doctor name and slot cannot be empty"))
         return False
 
-    # Allow case-insensitive doctor name input while preserving canonical key.
     doctor_lookup = {name.lower(): name for name in active_bookings}
     doctor_key = doctor_lookup.get(doctor.lower())
     if not doctor_key:

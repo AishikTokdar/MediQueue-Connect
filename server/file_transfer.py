@@ -40,7 +40,6 @@ def send_file_stream(
 
     print(f"  [FILE TRANSFER] Sending '{filename}' ({total_bytes} bytes in {total_chunks} chunks)...")
 
-    # Start notification
     start_payload = {
         "type": "FILE_START",
         "filename": filename,
@@ -53,7 +52,6 @@ def send_file_stream(
     else:
         sock.sendto(json.dumps(start_payload).encode("utf-8"), peer_addr)
 
-    # Chunks
     for idx, chunk in enumerate(chunks, 1):
         b64_chunk = base64.b64encode(chunk).decode("ascii")
         if session_key:
@@ -71,9 +69,8 @@ def send_file_stream(
             send_fn(sock, chunk_payload, peer_addr)
         else:
             sock.sendto(json.dumps(chunk_payload).encode("utf-8"), peer_addr)
-        time.sleep(0.01)  # Flow control pause
+        time.sleep(0.01)
 
-    # Completion notification
     end_payload = {
         "type": "FILE_END",
         "filename": filename,

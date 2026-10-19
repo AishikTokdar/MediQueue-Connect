@@ -9,7 +9,6 @@ from protocol import send_framed, recv_framed
 
 
 def test_framed_protocol_pack_unpack():
-    # Use socketpair for in-memory socket testing
     server_sock, client_sock = socket.socketpair()
 
     payload = {
@@ -30,7 +29,6 @@ def test_framed_protocol_pack_unpack():
 def test_framed_protocol_legacy_fallback():
     server_sock, client_sock = socket.socketpair()
 
-    # Legacy raw JSON payload ending with newline
     legacy_payload = b'{"command": "PING"}\n'
     client_sock.sendall(legacy_payload)
 

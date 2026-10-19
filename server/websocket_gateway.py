@@ -30,7 +30,6 @@ async def root():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
-    # Establish TCP client connection to Health Server
     ssl_ctx = None
     try:
         ssl_ctx = get_client_ssl_context()
@@ -40,7 +39,6 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         reader, writer = await asyncio.open_connection(HOST, TCP_PORT, ssl=ssl_ctx)
     except Exception:
-        # Fallback to plain TCP if SSL handshake fails
         try:
             reader, writer = await asyncio.open_connection(HOST, TCP_PORT)
         except Exception as e:

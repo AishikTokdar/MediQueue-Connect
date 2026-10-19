@@ -65,7 +65,6 @@ def generate_transcript_pdf(
 
     styles = getSampleStyleSheet()
 
-    # Custom color palette
     NAVY = colors.HexColor("#1E3A8A")
     TEAL = colors.HexColor("#0D9488")
     SLATE_DARK = colors.HexColor("#1E293B")
@@ -178,13 +177,11 @@ def generate_transcript_pdf(
 
     elements = []
 
-    # Title & Subtitle Header Block
     elements.append(Paragraph("MediQueue Connect", subtitle_style))
     elements.append(Paragraph("Clinical Consultation Summary & Transcript", title_style))
     elements.append(Spacer(1, 8))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=TEAL, spaceAfter=12))
 
-    # Calculate Session Info
     start_ts = "N/A"
     end_ts = "N/A"
     messages = []
@@ -202,7 +199,6 @@ def generate_transcript_pdf(
     if end_ts == "N/A" and messages:
         end_ts = messages[-1].get("ts", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    # Metadata Table Block
     meta_data = [
         [
             Paragraph("Session ID:", meta_label_style),
@@ -254,10 +250,8 @@ def generate_transcript_pdf(
     elements.append(meta_table)
     elements.append(Spacer(1, 14))
 
-    # Transcript Section Header
     elements.append(Paragraph("Session Dialogue Transcript", section_style))
 
-    # Transcript Table
     t_rows = [
         [
             Paragraph("Timestamp", table_header_style),
@@ -303,7 +297,6 @@ def generate_transcript_pdf(
         ("PADDING", (0, 0), (-1, -1), 5),
     ]
 
-    # Add alternating background colors for transcript rows
     for r_idx in range(1, len(t_rows)):
         bg = colors.HexColor("#FFFFFF") if r_idx % 2 == 1 else colors.HexColor("#F8FAFC")
         t_style.append(("BACKGROUND", (0, r_idx), (-1, r_idx), bg))
@@ -312,7 +305,6 @@ def generate_transcript_pdf(
     elements.append(t_table)
     elements.append(Spacer(1, 14))
 
-    # Optional Clinical Prescription (Rx) Section
     if prescription:
         elements.append(Paragraph("Clinical Prescription & Diagnosis (Rx)", section_style))
         diag_text = html.escape(prescription.get("diagnosis", "Unspecified"))
@@ -377,7 +369,6 @@ def generate_transcript_pdf(
             elements.append(rx_table)
             elements.append(Spacer(1, 14))
 
-    # Doctor Verification Sign-off Box
     signoff_data = [
         [
             Paragraph(
