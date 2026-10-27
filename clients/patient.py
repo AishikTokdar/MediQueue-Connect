@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from crypto_utils import (
     generate_ecdh_keypair,
     derive_ecdh_shared_key,
-    decrypt_session_key,
     encrypt_message,
     decrypt_message,
     crypto_available,
@@ -21,8 +20,8 @@ from crypto_utils import (
 from rudp import send_reliable_message, parse_or_ack
 from file_transfer import send_file_stream, FileReceiver
 
-HOST = "127.0.0.1"
-PORT = 4000
+HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
 
 _session_key: bytes | None = None
 _current_session_id: str | None = None
@@ -609,14 +608,9 @@ def main():  # noqa: C901
                 _session_key = derive_ecdh_shared_key(ecdh_priv, handshake["public_key"])
                 print("  [ENCRYPTED - ECDH X25519] Ephemeral session key negotiated with Perfect Forward Secrecy.")
             except Exception as e:
-                print(f"  [WARN] ECDH key derivation failed: {e}. Falling back.")
-        elif "encrypted_key" in handshake:
-            enc_key = handshake["encrypted_key"]
-            try:
-                _session_key = decrypt_session_key(enc_key)
-                print("  [ENCRYPTED - Legacy Passphrase] Session established")
-            except Exception as e:
-                print(f"  [WARN] Key decryption failed: {e}. Using plaintext.")
+                print(f"  [WARN] ECDH key derivation failed: {e}. Using plaintext.")
+        else:
+            print("  [WARN] Doctor did not provide ECDH public key. Using plaintext.")
     elif handshake["type"] == "READY":
         print("  Chat session established (no encryption).")
     elif handshake["type"] == "BUSY":

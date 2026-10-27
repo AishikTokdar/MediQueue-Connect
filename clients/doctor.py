@@ -10,9 +10,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from crypto_utils import (
     generate_ecdh_keypair,
     derive_ecdh_shared_key,
-    generate_session_key,
-    encrypt_session_key,
-    decrypt_session_key,
     decrypt_message,
     encrypt_message,
     crypto_available,
@@ -21,11 +18,11 @@ from crypto_utils import (
 from rudp import send_reliable_message, parse_or_ack
 from file_transfer import send_file_stream, FileReceiver
 
-HOST = "127.0.0.1"
-SERVER_PORT = 4000
+HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+SERVER_PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
 
 _current_session_id = None
-_doctor_token = "DOCTOR_INTERNAL"
+_doctor_token: str | None = None
 
 
 from protocol import send_framed, recv_framed
@@ -220,11 +217,11 @@ def main():
         "password": pwd_input,
     })
     if login_res and login_res.get("status") == "OK":
-        _doctor_token = login_res.get("token", "DOCTOR_INTERNAL")
+        _doctor_token = login_res.get("token")
         print(f"[OK] Doctor '{doctor_name}' authenticated successfully! (Role: {login_res.get('role', 'doctor')})")
     else:
         err = login_res.get("reason") if login_res else "No server response"
-        print(f"[WARN] Doctor authentication warning: {err}. Using local session.")
+        print(f"[WARN] Doctor authentication warning: {err}.")
 
     udp_port = info["udp_port"]
     specialization = info.get("specialization", "General Physician")
@@ -242,6 +239,7 @@ def main():
 
     global _current_session_id
     peers = {}
+    pending_invites = {}
 
     res = send_tcp({
         "command": "DOCTOR_ONLINE",
@@ -301,28 +299,19 @@ def main():
                     _current_session_id = msg.get("session_id", "unknown")
                     
                     s_key = None
-                    if crypto_available():
-                        if "public_key" in msg:
-                            try:
-                                doc_priv, doc_pub_b64 = generate_ecdh_keypair()
-                                s_key = derive_ecdh_shared_key(doc_priv, msg["public_key"])
-                                sock.sendto(json.dumps({
-                                    "type": "KEY_EXCHANGE",
-                                    "public_key": doc_pub_b64,
-                                    "session_id": _current_session_id,
-                                }).encode(), addr)
-                                print(f"  [ENCRYPTED - ECDH X25519] Ephemeral key negotiated with {patient_name}")
-                            except Exception as e:
-                                print(f"  [WARN] ECDH key exchange failed: {e}")
-                                s_key = None
-                        if s_key is None:
-                            s_key = generate_session_key()
-                            enc_key = encrypt_session_key(s_key)
+                    if crypto_available() and "public_key" in msg:
+                        try:
+                            doc_priv, doc_pub_b64 = generate_ecdh_keypair()
+                            s_key = derive_ecdh_shared_key(doc_priv, msg["public_key"])
                             sock.sendto(json.dumps({
                                 "type": "KEY_EXCHANGE",
-                                "encrypted_key": enc_key,
+                                "public_key": doc_pub_b64,
                                 "session_id": _current_session_id,
                             }).encode(), addr)
+                            print(f"  [ENCRYPTED - ECDH X25519] Ephemeral key negotiated with {patient_name}")
+                        except Exception as e:
+                            print(f"  [WARN] ECDH key exchange failed: {e}")
+                            s_key = None
                     else:
                         sock.sendto(json.dumps({
                             "type": "READY",
@@ -335,9 +324,15 @@ def main():
                     display_clinical_intake(patient_name, esi_level=esi_level)
 
                 elif msg["type"] == "KEY_EXCHANGE":
-                    enc_key = msg.get("encrypted_key")
-                    s_key = decrypt_session_key(enc_key) if enc_key else None
+                    s_key = None
                     peer_name = "Doctor (Invited)"
+                    if "public_key" in msg and addr in pending_invites:
+                        inv_info = pending_invites.pop(addr)
+                        try:
+                            s_key = derive_ecdh_shared_key(inv_info["priv_key"], msg["public_key"])
+                            peer_name = f"Dr. {inv_info['target']} (Invited - ECDH X25519)"
+                        except Exception as e:
+                            print(f"  [WARN] ECDH key derivation for invited doctor failed: {e}")
                     peers[addr] = {"name": peer_name, "session_key": s_key, "transcript": []}
                     print(f"\n[JOINED] {peer_name}\n")
                     
@@ -378,12 +373,21 @@ def main():
                         target_doc = reply.split()[1]
                         if target_doc in doctors:
                             t_port = doctors[target_doc]["udp_port"]
-                            sock.sendto(json.dumps({
+                            target_addr = (HOST, t_port)
+                            inv_payload = {
                                 "type": "HELLO",
-                                "patient": doctor_name,
+                                "patient": f"Dr. {doctor_name}",
                                 "session_id": _current_session_id,
-                            }).encode(), (HOST, t_port))
-                            print(f"[INVITED {target_doc}]")
+                            }
+                            if crypto_available():
+                                try:
+                                    inv_priv, inv_pub_b64 = generate_ecdh_keypair()
+                                    inv_payload["public_key"] = inv_pub_b64
+                                    pending_invites[target_addr] = {"target": target_doc, "priv_key": inv_priv}
+                                except Exception as e:
+                                    print(f"  [WARN] ECDH keypair generation failed for invite: {e}")
+                            sock.sendto(json.dumps(inv_payload).encode(), target_addr)
+                            print(f"[INVITED {target_doc}] (Awaiting secure ECDH handshake...)")
                         else:
                             print(f"[ERROR] Doctor {target_doc} not found.")
                         continue
@@ -429,7 +433,7 @@ def main():
         print("\n[DOCTOR OFFLINE] Shutting down...")
         send_tcp({
             "command": "DOCTOR_OFFLINE",
-            "token": "DOCTOR_INTERNAL",
+            "token": _doctor_token or "",
             "doctor": doctor_name
         })
         sock.close()
@@ -439,7 +443,7 @@ def _notify_server_end(doctor_name: str, session_id: str | None, patient_name: s
     if session_id:
         end_payload = {
             "command": "END_SESSION",
-            "token": "DOCTOR_INTERNAL",
+            "token": _doctor_token or "",
             "doctor": doctor_name,
             "session_id": session_id or "",
             "patient": patient_name,

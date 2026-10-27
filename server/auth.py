@@ -26,7 +26,7 @@ class AuthManager:
     def _hash_password(self, pwd: str) -> str:
         if _ARGON2_AVAILABLE and self.ph:
             return self.ph.hash(pwd)
-        salt = "mediqueue_salt_2026"
+        salt = os.getenv("MEDIQUEUE_SALT", "mediqueue_salt_2026")
         return "sha256$" + hashlib.sha256((salt + pwd).encode()).hexdigest()
 
     def _verify_password(self, pwd: str, hash_val: str) -> bool:
@@ -36,7 +36,7 @@ class AuthManager:
             sha_matches = hashlib.sha256(pwd.encode()).hexdigest() == hash_val
             return sha_matches
         if hash_val.startswith("sha256$"):
-            salt = "mediqueue_salt_2026"
+            salt = os.getenv("MEDIQUEUE_SALT", "mediqueue_salt_2026")
             return ("sha256$" + hashlib.sha256((salt + pwd).encode()).hexdigest()) == hash_val
 
         if _ARGON2_AVAILABLE and self.ph:
@@ -119,16 +119,16 @@ class AuthManager:
         cache.set_session(token, f"{role}:{user}")
 
     def validate(self, token: str) -> bool:
-        if token == "DOCTOR_INTERNAL":
-            return True
+        if not token:
+            return False
         cached_user = cache.get_session(token)
         if cached_user:
             return True
         return token in self.sessions
 
     def get_role(self, token: str) -> str:
-        if token == "DOCTOR_INTERNAL":
-            return "doctor"
+        if not token:
+            return ""
         cached = cache.get_session(token)
         if cached and ":" in cached:
             return cached.split(":", 1)[0]
@@ -138,8 +138,8 @@ class AuthManager:
         return self.get_role(token) == "doctor"
 
     def get_user(self, token: str) -> str:
-        if token == "DOCTOR_INTERNAL":
-            return "DOCTOR_INTERNAL"
+        if not token:
+            return ""
         cached_user = cache.get_session(token)
         if cached_user:
             if ":" in cached_user:
