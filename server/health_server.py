@@ -49,8 +49,8 @@ from tasks import (
 
 
 
-HOST = "127.0.0.1"
-PORT = 4000
+HOST = os.getenv("HEALTH_SERVER_BIND_HOST", "0.0.0.0")
+PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
 
 init_db()
 
@@ -426,7 +426,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
 
     elif cmd == "ISSUE_PRESCRIPTION":
         token = data.get("token")
-        if token != "DOCTOR_INTERNAL" and not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
+        if not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
             return {"status": "ERROR", "reason": "Unauthorized: Doctor credentials required"}
         session_id = data.get("session_id", "")
         doctor = data.get("doctor", "")
@@ -551,7 +551,7 @@ async def process_command(cmd: str, data: Dict[str, Any], client_ip: str, trace_
 
     elif cmd == "GET_PATIENT_INTAKE":
         token = data.get("token")
-        if token != "DOCTOR_INTERNAL" and not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
+        if not (token and auth.validate(token) and auth.get_role(token) == "doctor"):
             return {"status": "ERROR", "reason": "Unauthorized: Doctor credentials required"}
         patient = data.get("patient", "")
         prof = get_patient_profile(patient)

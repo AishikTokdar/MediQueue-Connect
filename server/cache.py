@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import threading
@@ -12,16 +13,19 @@ except ImportError:
 
 class CacheManager:
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 6379, db: int = 0):
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None, db: int = 0):
         self.use_redis = False
         self.client = None
         self._lock = threading.Lock()
         self._memory_store: Dict[str, Any] = {}
         self._memory_expiry: Dict[str, float] = {}
 
+        target_host = host or os.getenv("REDIS_HOST", "127.0.0.1")
+        target_port = port or int(os.getenv("REDIS_PORT", "6379"))
+
         if _REDIS_AVAILABLE:
             try:
-                r = redis.Redis(host=host, port=port, db=db, socket_timeout=0.5, socket_connect_timeout=0.5)
+                r = redis.Redis(host=target_host, port=target_port, db=db, socket_timeout=0.5, socket_connect_timeout=0.5)
                 r.ping()
                 self.client = r
                 self.use_redis = True

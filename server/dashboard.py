@@ -7,8 +7,8 @@ import argparse
 from datetime import datetime
 from crypto_utils import wrap_client_socket
 
-HOST = "127.0.0.1"
-PORT = 4000
+HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "server_logs.txt")
 
 RESET   = "\033[0m"

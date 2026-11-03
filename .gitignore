@@ -36,6 +36,7 @@ htmlcov/
 # Local environment, certificates, and secrets
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 *.crt

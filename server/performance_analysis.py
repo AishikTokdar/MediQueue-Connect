@@ -10,9 +10,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from crypto_utils import wrap_client_socket
 
-HOST = "127.0.0.1"
-SERVER_PORT = 4000
-UDP_ECHO_PORT = 5999
+HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+SERVER_PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
+UDP_ECHO_PORT = int(os.getenv("UDP_ECHO_PORT", "5999"))
 
 _echo_ready = threading.Event()
 

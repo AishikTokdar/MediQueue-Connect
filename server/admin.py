@@ -9,8 +9,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = _ROOT / "data"
 CHAT_HISTORY_DIR = DATA_DIR / "chat_history"
 
-HOST = "127.0.0.1"
-PORT = 4000
+HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
 
 RESET   = "\033[0m"
 BOLD    = "\033[1m"

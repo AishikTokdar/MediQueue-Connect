@@ -10,9 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from crypto_utils import get_client_ssl_context
 from protocol import async_recv_framed, async_send_framed
 
-HOST = "127.0.0.1"
-TCP_PORT = 4000
-WS_PORT = 8080
+HEALTH_SERVER_HOST = os.getenv("HEALTH_SERVER_HOST", "127.0.0.1")
+HEALTH_SERVER_PORT = int(os.getenv("HEALTH_SERVER_PORT", "4000"))
+WS_BIND_HOST = os.getenv("WS_BIND_HOST", "0.0.0.0")
+WS_PORT = int(os.getenv("WS_PORT", "8080"))
 
 app = FastAPI(title="MediQueue Connect WebSocket Gateway", version="1.0.0")
 
@@ -22,7 +23,7 @@ async def root():
     return {
         "service": "MediQueue Connect WebSocket Gateway Bridge",
         "status": "online",
-        "websocket_endpoint": f"ws://{HOST}:{WS_PORT}/ws"
+        "websocket_endpoint": f"ws://127.0.0.1:{WS_PORT}/ws"
     }
 
 
@@ -37,10 +38,10 @@ async def websocket_endpoint(websocket: WebSocket):
         ssl_ctx = None
 
     try:
-        reader, writer = await asyncio.open_connection(HOST, TCP_PORT, ssl=ssl_ctx)
+        reader, writer = await asyncio.open_connection(HEALTH_SERVER_HOST, HEALTH_SERVER_PORT, ssl=ssl_ctx)
     except Exception:
         try:
-            reader, writer = await asyncio.open_connection(HOST, TCP_PORT)
+            reader, writer = await asyncio.open_connection(HEALTH_SERVER_HOST, HEALTH_SERVER_PORT)
         except Exception as e:
             await websocket.send_json({"status": "ERROR", "reason": f"Cannot connect to Health Server: {e}"})
             await websocket.close()
@@ -85,4 +86,4 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host=HOST, port=WS_PORT)
+    uvicorn.run(app, host=WS_BIND_HOST, port=WS_PORT)
