@@ -8,6 +8,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 
 ## Quick Badges
 
+![CI Pipeline](https://github.com/AishikTokdar/MediQueue-Connect/actions/workflows/ci.yml/badge.svg)
 ![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform Support](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-success?style=for-the-badge&logo=linux&logoColor=white)
 ![Protocols](https://img.shields.io/badge/Protocols-Async%20TCP%20%2B%20R--UDP%20%2B%20WebSockets-orange?style=for-the-badge)
@@ -16,7 +17,7 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 ![Tasks](https://img.shields.io/badge/Task%20Queue-Celery%20%2B%20RabbitMQ-37814A?style=for-the-badge&logo=celery&logoColor=white)
 ![Observability](https://img.shields.io/badge/Observability-Prometheus%20%2Fmetrics-yellow?style=for-the-badge)
 ![Docker](https://img.shields.io/badge/Docker-Compose%20Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-Pytest%20Suite%20Passed-brightgreen?style=for-the-badge)
+![Tests](https://img.shields.io/badge/Tests-29%20Passed-brightgreen?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-GPLv3-lightgrey?style=for-the-badge)
 
 ---
@@ -26,16 +27,16 @@ MediQueue Connect simulates a real-life hospital workflow. It enables patients t
 1. [Overview](#overview)
 2. [Key Architectural Highlights](#key-architectural-highlights)
 3. [System Architecture](#system-architecture)
-4. [Core Computer Network & Backend Concepts Used](#core-computer-network--backend-concepts-used)
+4. [Core Computer Network & Backend Concepts Used](#core-computer-network-backend-concepts-used)
 5. [Project Structure](#project-structure)
-6. [Installation & Requirements](#installation--requirements)
-7. [Pre-configured Accounts & Doctor Specializations (For Testing)](#pre-configured-accounts--doctor-specializations-for-testing)
+6. [Installation & Requirements](#installation-requirements)
+7. [Pre-configured Accounts & Doctor Specializations (For Testing)](#pre-configured-accounts-doctor-specializations-for-testing)
 8. [Automated Test Suite](#automated-test-suite)
 9. [Step-by-Step Run Guide](#step-by-step-run-guide)
-10. [Feature Tour & Interactive Demos](#feature-tour--interactive-demos)
-11. [Security Features & Controls](#security-features--controls)
-12. [Troubleshooting & OS Compatibility Notes](#troubleshooting--os-compatibility-notes)
-13. [Future Improvements & Production Status](#future-improvements--production-status)
+10. [Feature Tour & Interactive Demos](#feature-tour-interactive-demos)
+11. [Security Features & Controls](#security-features-controls)
+12. [Troubleshooting & OS Compatibility Notes](#troubleshooting-os-compatibility-notes)
+13. [Future Improvements & Production Status](#future-improvements-production-status)
 14. [Contributors](#contributors)
 15. [License](#license)
 
@@ -144,6 +145,7 @@ graph TD
 
 ---
 
+<a id="core-computer-network-backend-concepts-used"></a>
 ## Core Computer Network & Backend Concepts Used
 
 MediQueue Connect is a sandbox for demonstrating several primary networking and backend engineering paradigms:
@@ -221,11 +223,21 @@ MediQueue-Connect/
 │   ├── dashboard.py            # Live-updating ANSI terminal dashboard
 │   └── performance_analysis.py # Comparative TCP vs UDP latency benchmark utility
 │
+├── .env.example            # Environment configuration template (hosts, ports, brokers, salts)
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # GitHub Actions CI matrix workflow (Python 3.10-3.12, Pytest, Docker)
+│
 ├── tests/
 │   ├── test_db.py              # Unit tests for SQLite storage, Argon2id, and scheduler
 │   ├── test_cache.py           # Unit tests for Redis session caching and query invalidation
 │   ├── test_metrics.py         # Unit tests for Prometheus counter and gauge metrics
 │   ├── test_protocol.py        # Unit tests for length-prefixed framing and fallback handling
+│   ├── test_rudp.py            # Unit tests for Reliable UDP packet checksums, ARQ, and deduplication
+│   ├── test_crypto.py          # Unit tests for Curve25519 ECDH key exchange and forward secrecy
+│   ├── test_queue_manager.py   # Unit tests for ESI triage prioritization and anti-starvation aging
+│   ├── test_rate_limiter.py    # Unit tests for token bucket rate limiting and IP banning
+│   ├── test_doctor_auth_flow.py# Integration tests for zero-trust doctor RBAC & bypass rejection
 │   ├── test_tasks.py           # Unit tests for Celery tasks and PDF summary exporter
 │   └── test_server_integration.py # Async integration tests for full server lifecycle
 │
@@ -242,6 +254,7 @@ MediQueue-Connect/
 
 ---
 
+<a id="installation-requirements"></a>
 ## Installation & Requirements
 
 ### Dependencies
@@ -270,10 +283,17 @@ source .venv/bin/activate
 
 # Install required packages
 pip install -r requirements.txt
+
+# (Optional) Copy environment template to customize ports, hosts, and brokers
+# On Linux / macOS:
+cp .env.example .env
+# On Windows (PowerShell):
+Copy-Item .env.example .env
 ```
 
 ---
 
+<a id="pre-configured-accounts-doctor-specializations-for-testing"></a>
 ## Pre-configured Accounts & Doctor Specializations (For Testing)
 
 ### Patient Accounts
@@ -317,7 +337,7 @@ Doctors are categorized into specific specializations and accept different insur
 
 ## Automated Test Suite
 
-To run the automated `pytest` test suite:
+To run the automated `pytest` test suite covering all 11 test suites (29 comprehensive test cases):
 
 ```bash
 python -m pytest -v tests/
@@ -326,22 +346,39 @@ python -m pytest -v tests/
 *Expected Output:*
 ```text
 ============================= test session starts =============================
-collected 12 items
+collected 29 items
 
-tests/test_cache.py::test_cache_manager_session PASSED                   [  8%]
-tests/test_cache.py::test_cache_manager_slots PASSED                     [ 16%]
-tests/test_db.py::test_auth_manager_register_and_login PASSED            [ 25%]
-tests/test_db.py::test_scheduler_doctor_and_booking PASSED               [ 33%]
-tests/test_db.py::test_audit_logs PASSED                                 [ 41%]
-tests/test_metrics.py::test_prometheus_metrics PASSED                    [ 50%]
-tests/test_protocol.py::test_framed_protocol_pack_unpack PASSED          [ 58%]
-tests/test_protocol.py::test_framed_protocol_legacy_fallback PASSED      [ 66%]
-tests/test_server_integration.py::test_full_server_async_request_flow PASSED [ 75%]
-tests/test_tasks.py::test_pdf_generator_directly PASSED                  [ 83%]
-tests/test_tasks.py::test_generate_session_summary_pdf_task PASSED       [ 91%]
-tests/test_tasks.py::test_email_and_sms_reminder_tasks PASSED             [100%]
+tests/test_cache.py::test_cache_manager_session PASSED                   [  3%]
+tests/test_cache.py::test_cache_manager_slots PASSED                     [  6%]
+tests/test_crypto.py::test_crypto_available_flag PASSED                  [ 10%]
+tests/test_crypto.py::test_ecdh_x25519_key_exchange_agreement PASSED     [ 13%]
+tests/test_crypto.py::test_message_encryption_and_decryption_roundtrip PASSED [ 17%]
+tests/test_crypto.py::test_tampered_ciphertext_detection PASSED          [ 20%]
+tests/test_crypto.py::test_session_key_wrap_and_unwrap PASSED            [ 24%]
+tests/test_db.py::test_auth_manager_register_and_login PASSED            [ 27%]
+tests/test_db.py::test_scheduler_doctor_and_booking PASSED               [ 31%]
+tests/test_db.py::test_audit_logs PASSED                                 [ 34%]
+tests/test_doctor_auth_flow.py::test_doctor_rbac_and_bypass_rejection PASSED [ 37%]
+tests/test_metrics.py::test_prometheus_metrics PASSED                    [ 41%]
+tests/test_protocol.py::test_framed_protocol_pack_unpack PASSED          [ 44%]
+tests/test_protocol.py::test_framed_protocol_legacy_fallback PASSED      [ 48%]
+tests/test_queue_manager.py::test_queue_entry_score_and_aging_bonus PASSED [ 51%]
+tests/test_queue_manager.py::test_queue_manager_esi_triage_ordering PASSED [ 55%]
+tests/test_queue_manager.py::test_queue_manager_anti_starvation_promotion PASSED [ 58%]
+tests/test_queue_manager.py::test_queue_manager_session_lifecycle PASSED [ 62%]
+tests/test_queue_manager.py::test_queue_manager_cancellation PASSED      [ 65%]
+tests/test_rate_limiter.py::test_rate_limiter_allow_under_capacity PASSED [ 68%]
+tests/test_rate_limiter.py::test_rate_limiter_ban_on_exhaustion PASSED   [ 72%]
+tests/test_rudp.py::test_rudp_packet_valid_serialization PASSED          [ 75%]
+tests/test_rudp.py::test_rudp_packet_corruption_detection PASSED         [ 79%]
+tests/test_rudp.py::test_rudp_connection_duplicate_suppression PASSED    [ 82%]
+tests/test_rudp.py::test_rudp_reliable_send_and_ack_loop PASSED          [ 86%]
+tests/test_server_integration.py::test_full_server_async_request_flow PASSED [ 89%]
+tests/test_tasks.py::test_pdf_generator_directly PASSED                  [ 93%]
+tests/test_tasks.py::test_generate_session_summary_pdf_task PASSED       [ 96%]
+tests/test_tasks.py::test_email_and_sms_reminder_tasks PASSED            [100%]
 
-============================= 12 passed in 0.81s ==============================
+======================== 29 passed in 0.59s ========================
 ```
 
 ---
@@ -434,6 +471,7 @@ docker compose up --build -d
 
 ---
 
+<a id="feature-tour-interactive-demos"></a>
 ## Feature Tour & Interactive Demos
 
 ### 1. Booking a Slot & Patient Scheduling
@@ -506,9 +544,22 @@ Using `python server/admin.py`:
 
 ---
 
+<a id="security-features-controls"></a>
 ## Security Features & Controls
 
 MediQueue Connect includes production security features suited for local socket networks and distributed microservices:
+
+### Zero-Trust Role-Based Access Control (RBAC)
+- All privileged endpoints (`ISSUE_PRESCRIPTION`, `GET_PATIENT_INTAKE`, `DOCTOR_ONLINE`, `DOCTOR_OFFLINE`) strictly validate cryptographically generated UUID session tokens stored in Redis with `role == "doctor"`.
+- Requests bearing forged tokens, patient tokens, or missing credentials are automatically rejected with `ERROR: Unauthorized`.
+
+### Ephemeral Curve25519 ECDH Key Exchange & Perfect Forward Secrecy (PFS)
+- Peer-to-peer consultations dynamically negotiate transient X25519 elliptic-curve keypairs over the control plane.
+- Derives 32-byte symmetric Fernet keys using HKDF-SHA256, ensuring that past sessions remain confidential even if long-term credentials were ever compromised.
+
+### Configurable Secrets & Environment Variables (.env.example)
+- All network interfaces, ports, message brokers, and cryptographic parameters support 12-factor configuration via `.env` (templated in `.env.example`).
+- Secret salts (`MEDIQUEUE_SALT`), broker URLs (`RABBITMQ_URL`, `REDIS_URL`), and host bindings dynamically inject with secure local defaults.
 
 ### Rate Limiting & Auto-Ban
 - Prevents socket flooding (denial of service).
@@ -525,6 +576,7 @@ MediQueue Connect includes production security features suited for local socket 
 
 ---
 
+<a id="troubleshooting-os-compatibility-notes"></a>
 ## Troubleshooting & OS Compatibility Notes
 
 ### Windows Console Colors
@@ -537,9 +589,10 @@ Each doctor operates on a dedicated UDP port defined in `data/doctors.json` (ran
 
 ---
 
+<a id="future-improvements-production-status"></a>
 ## Future Improvements & Production Status
 
-To transition MediQueue Connect from an educational prototype into an enterprise-ready telemedicine network, 25 comprehensive architectural features have been implemented across the backend, networking, clinical, and security layers. Additional roadmap enhancements are detailed below:
+To transition MediQueue Connect from an educational prototype into an enterprise-ready telemedicine network, 27 comprehensive architectural features have been implemented across the backend, networking, clinical, and security layers. Additional roadmap enhancements are detailed below:
 
 ### Implemented Architectural Features
 
@@ -568,6 +621,8 @@ To transition MediQueue Connect from an educational prototype into an enterprise
 - **Date-Specific Slot Cancellation & Parameter Binding**: Enhanced appointment cancellation protocols (`CANCEL_MY_BOOKING`, `server/scheduler.py`) to accept optional `appointment_date` parameters, enabling patients and administrators to cancel date-specific bookings while leaving future appointments intact.
 - **Zero-Dependency Lightweight Fallback Engine**: Hardened backend modules with multi-tier graceful degradation (salted SHA-256 fallback when `argon2-cffi` is absent, structured text fallback when `reportlab` is uninstalled, and in-memory mock metrics when `prometheus_client` is missing) ensuring full portability across environments.
 - **Instant Registration Session Handshake**: Streamlined user registration (`REGISTER`, `server/health_server.py`) to return authenticated session tokens and insurance profiles immediately, allowing CLI and Web clients to transition into authenticated workflows without redundant login round-trips.
+- **Zero-Trust Session Verification & Removal of Static Bypasses**: Eradicated static and placeholder bypass tokens across all clinical endpoints, enforcing strict runtime role validation with cryptographically random UUID tokens verified against Redis cache and SQLite.
+- **Continuous Integration & Multi-Python Matrix Testing**: Built an automated GitHub Actions CI pipeline running across Python 3.10, 3.11, and 3.12, executing syntax compilation, a 29-test comprehensive Pytest suite, and Docker container verification on all commits and PRs.
 
 ### Planned Architectural Roadmap (Future Improvements)
 
