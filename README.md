@@ -76,72 +76,47 @@ The primary engineering milestones and technical design highlights built into Me
 
 ## System Architecture
 
-The following diagram illustrates how the core components communicate using TCP, UDP, WebSockets, local SQLite datastores, Redis cache, Prometheus telemetry, and the publish-subscribe model:
+MediQueue Connect is engineered with a modular, distributed topology separating control-plane transactions (authentication, scheduling, queue state management, administration) from high-throughput real-time data-plane interactions (encrypted peer-to-peer consultations, reliable packet transport, clinical attachment streaming).
 
-```mermaid
-graph TD
-    subgraph Clients ["Client Layer"]
-        P[Patient CLI - patient.py]
-        D[Doctor Console - doctor.py]
-        WS_CLIENT[Browser / Web Client - WebSocket ws://]
-    end
+### 1. High-Level System & Network Architecture
 
-    subgraph Monitoring ["Monitoring & Admin"]
-        A[Admin Console - admin.py]
-        DS[Live Dashboard - dashboard.py]
-        PA[Perf Analyzer - performance_analysis.py]
-        PROM[Prometheus Exporter - Port 8000 /metrics]
-    end
+The following diagram illustrates the complete end-to-end network topology, showing multi-client ingress, perimeter security, asynchronous event-driven core routing, dual caching/storage layers, background Celery/RabbitMQ task offloading, and Prometheus observability:
 
-    subgraph Server ["Server Layer (health_server.py - Asyncio Core)"]
-        WS_GATEWAY[WebSocket Gateway Bridge - Port 8080]
-        TCP[TLS TCP Listener: Port 4000]
-        PF[Length-Prefixed Framing Protocol]
-        PV[Pydantic Schema Validator]
-        RL[Rate Limiter & IP Ban Engine]
-        QM[Queue Manager & Session Orchestration]
-        SM[Scheduler & Booking Manager]
-        AM[Auth Manager & Argon2id Hashing]
-        LOG[Structured JSON & Audit Logger]
-    end
+<p align="center">
+  <img src="assets/System_Architecture.png" alt="MediQueue Connect - Production System and Network Architecture" width="100%" />
+</p>
 
-    subgraph Data ["Storage & Cache Layer"]
-        REDIS[(Redis Cache - Port 6379)]
-        SQLDB[(SQLite DB - mediqueue.db)]
-        C_LOGS[(chat_history/)]
-        S_LOGS[(server_logs.txt)]
-    end
+<details>
+<summary><b>View Architecture Layer Breakdown</b></summary>
 
-    %% Network Connections
-    WS_CLIENT -- "WebSocket ws://" --> WS_GATEWAY
-    WS_GATEWAY -- "Framed TCP" --> TCP
-    P <-- Length-Prefixed TCP --> TCP
-    D <-- Length-Prefixed TCP Handshake --> TCP
-    P -- Encrypted UDP Chat --> D
-    D -- UDP Invite Collaboration --> D
-    A <-- TCP Admin Commands --> TCP
-    DS <-- Polling TCP Stats --> TCP
-    PA <-- TCP Ping / UDP Echo --> TCP
+- **Ingress & Client Tier**: Patient CLI (`patient.py`), Doctor Terminal (`doctor.py`), Web Browser via WebSocket (`/ws`), Admin Console (`admin.py`), and Live Dashboard (`dashboard.py`).
+- **Gateway & Perimeter Security**: FastAPI / Uvicorn WebSocket Gateway (Port 8080) bridging WebSocket JSON frames to 4-byte length-prefixed TCP binary frames, TLS 1.3 socket termination (Port 4000), Token-Bucket Rate Limiter (10 req/s, burst 20, 300s ban), and Pydantic v2 schema validation.
+- **Asyncio Core & Dispatcher**: Event-driven `asyncio` server (`health_server.py`) dispatching over 20 RPC actions with trace ID logging.
+- **Consultation & P2P Engine**: Ephemeral Curve25519 ECDH key exchange with Perfect Forward Secrecy, Reliable UDP (R-UDP) transport with ARQ sequence numbers and ACKs, Fernet symmetric encryption, and in-band encrypted file streaming.
+- **Distributed Task Queue**: RabbitMQ message broker (Port 5672) with Celery worker pool and Celery Beat scheduler executing ReportLab PDF summary generation and scheduled email/SMS reminder sweeps.
+- **Persistence & Observability**: SQLite database in WAL mode (`mediqueue.db`), Redis session & slot cache (Port 6379) with Pub/Sub cluster broadcast, audit logs in JSONL (`chat_history/`), and Prometheus HTTP metrics exporter (Port 8000 `/metrics`).
+</details>
 
-    %% Internal Server flows
-    TCP --> PF
-    PF --> PV
-    PV --> RL
-    RL --> AM
-    RL --> SM
-    RL --> QM
-    RL --> LOG
-    RL --> PROM
+---
 
-    %% File & Cache IO
-    AM <--> REDIS
-    SM <--> REDIS
-    AM <--> SQLDB
-    SM <--> SQLDB
-    LOG --> SQLDB
-    LOG --> S_LOGS
-    QM --> C_LOGS
-```
+### 2. Consultation Lifecycle & Reliable UDP (R-UDP) Protocol Architecture
+
+The consultation data plane operates independently from the main control server, implementing a custom reliable transport layer with emergency triage, peer-to-peer security, and post-consultation audit generation:
+
+<p align="center">
+  <img src="assets/Protocol_Architecture.png" alt="MediQueue Connect - Consultation and Protocol Architecture" width="100%" />
+</p>
+
+<details>
+<summary><b>View Protocol & Triage Breakdown</b></summary>
+
+- **Emergency Severity Index (ESI 1–5) Triage**: Dynamic priority queueing prioritizing acute emergencies with continuous anti-starvation age deduction (`-0.25` level boost every 60 seconds).
+- **Curve25519 Ephemeral ECDH Handshake**: Peer-to-peer public key negotiation deriving an ephemeral 256-bit Fernet key via HKDF-SHA256, guaranteeing Perfect Forward Secrecy.
+- **Reliable UDP (R-UDP) Transport Core**: Stop-and-Wait / Go-Back-N ARQ with 32-bit sequence numbers, positive ACKs, MD5-8 payload checksum verification, and duplicate deduplication.
+- **Multi-Peer Doctor Collaboration**: In-band clinical invite protocol (`/invite`) allowing attending physicians to bring consulting specialists into active encrypted sessions.
+- **In-Band Chunked File Streaming**: Encrypted file transfer protocol (`/sendfile`) chunking lab reports and attachments in base64 over R-UDP.
+- **Audit & Report Pipeline**: Post-consultation transcript synchronization into audit-grade JSONL logs, structured digital prescription (Rx) records, and automated Celery ReportLab PDF report generation.
+</details>
 
 ---
 
