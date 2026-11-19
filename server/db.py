@@ -21,7 +21,10 @@ def get_db_connection() -> sqlite3.Connection:
         conn = sqlite3.connect(DB_PATH, timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA foreign_keys=ON;")
+        conn.execute("PRAGMA temp_store=MEMORY;")
+        conn.execute("PRAGMA cache_size=-64000;")
         _local.conn = conn
         _local.db_path = DB_PATH
     return _local.conn
@@ -139,6 +142,14 @@ def init_db() -> None:
             );
         """)
 
+        # Performance optimization indexes (B-Tree lookups)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_date_doc ON bookings(appointment_date, doctor);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bookings_patient ON bookings(patient);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_doctor_reviews_doc ON doctor_reviews(doctor);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON audit_logs(user, action);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON prescriptions(patient);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_prescriptions_session ON prescriptions(session_id);")
+
     _seed_from_json(conn)
 
 
@@ -212,6 +223,18 @@ def add_audit_log(action: str, user: Optional[str] = None, trace_id: Optional[st
         conn.execute(
             "INSERT INTO audit_logs (action, user, trace_id, details) VALUES (?, ?, ?, ?)",
             (action, user, trace_id, details)
+        )
+
+
+def add_audit_logs_batch(records: List[Tuple[str, Optional[str], Optional[str], Optional[str]]]) -> None:
+    """Inserts multiple audit log entries within a single atomic transaction."""
+    if not records:
+        return
+    conn = get_db_connection()
+    with conn:
+        conn.executemany(
+            "INSERT INTO audit_logs (action, user, trace_id, details) VALUES (?, ?, ?, ?)",
+            records
         )
 
 
@@ -370,12 +393,12 @@ def get_doctor_rating_stats(doctor: str) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "SELECT COUNT(*) as count, AVG(rating) as avg_rating FROM doctor_reviews WHERE doctor = ?",
+        "SELECT COUNT(*), AVG(rating) FROM doctor_reviews WHERE doctor = ?",
         (doctor,)
     )
     row = cur.fetchone()
-    count = row["count"] if row else 0
-    avg_rating = round(row["avg_rating"], 1) if (row and row["avg_rating"]) else 5.0
+    count = row[0] if row else 0
+    avg_rating = round(row[1], 1) if (row and row[1]) else 5.0
     return {
         "doctor": doctor,
         "total_reviews": count,
@@ -387,13 +410,14 @@ def get_all_doctor_ratings() -> Dict[str, Dict[str, Any]]:
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "SELECT doctor, COUNT(*) as count, AVG(rating) as avg_rating FROM doctor_reviews GROUP BY doctor"
+        "SELECT doctor, COUNT(*), AVG(rating) FROM doctor_reviews GROUP BY doctor"
     )
     res = {}
     for row in cur.fetchall():
-        res[row["doctor"]] = {
-            "total_reviews": row["count"],
-            "average_rating": round(row["avg_rating"], 1) if row["avg_rating"] else 5.0,
+        doc, count, avg_r = row[0], row[1], row[2]
+        res[doc] = {
+            "total_reviews": count,
+            "average_rating": round(avg_r, 1) if avg_r else 5.0,
         }
     return res
 

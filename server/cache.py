@@ -10,6 +10,14 @@ try:
 except ImportError:
     _REDIS_AVAILABLE = False
 
+try:
+    import fakeredis
+    _FAKEREDIS_AVAILABLE = True
+except ImportError:
+    _FAKEREDIS_AVAILABLE = False
+
+_FAILED_REDIS_ENDPOINTS: set[Tuple[str, int]] = set()
+
 
 class CacheManager:
 
@@ -19,18 +27,30 @@ class CacheManager:
         self._lock = threading.Lock()
         self._memory_store: Dict[str, Any] = {}
         self._memory_expiry: Dict[str, float] = {}
+        self._slots_keys: set[str] = set()
 
         target_host = host or os.getenv("REDIS_HOST", "127.0.0.1")
         target_port = port or int(os.getenv("REDIS_PORT", "6379"))
+        endpoint = (target_host, target_port)
 
-        if _REDIS_AVAILABLE:
+        # Check if environment requests fakeredis
+        if os.getenv("USE_FAKEREDIS", "0").lower() in ("1", "true", "yes") and _FAKEREDIS_AVAILABLE:
             try:
-                r = redis.Redis(host=target_host, port=target_port, db=db, socket_timeout=0.5, socket_connect_timeout=0.5)
+                self.client = fakeredis.FakeRedis()
+                self.use_redis = True
+                return
+            except Exception:
+                pass
+
+        if _REDIS_AVAILABLE and endpoint not in _FAILED_REDIS_ENDPOINTS:
+            try:
+                r = redis.Redis(host=target_host, port=target_port, db=db, socket_timeout=0.2, socket_connect_timeout=0.2)
                 r.ping()
                 self.client = r
                 self.use_redis = True
             except Exception:
                 self.use_redis = False
+                _FAILED_REDIS_ENDPOINTS.add(endpoint)
 
     def set_session(self, token: str, user: str, ttl: int = 3600) -> None:
         key = f"session:{token}"
@@ -110,6 +130,7 @@ class CacheManager:
         with self._lock:
             self._memory_store[full_key] = data
             self._memory_expiry[full_key] = time.time() + ttl
+            self._slots_keys.add(full_key)
 
     def invalidate_slots_cache(self) -> None:
         if self.use_redis and self.client:
@@ -122,8 +143,9 @@ class CacheManager:
                 self.use_redis = False
 
         with self._lock:
-            keys_to_del = [k for k in self._memory_store if k.startswith("slots_cache:")]
-            for k in keys_to_del:
+            keys = self._slots_keys
+            self._slots_keys = set()
+            for k in keys:
                 self._memory_store.pop(k, None)
                 self._memory_expiry.pop(k, None)
 

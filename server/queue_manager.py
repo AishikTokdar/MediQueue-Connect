@@ -13,7 +13,12 @@ ESI_LEVELS = {
 }
 
 
+_AGING_FACTOR: float = 0.25 / 60.0
+
+
 class QueueEntry:
+    __slots__ = ("username", "esi_level", "arrival_time", "conn")
+
     def __init__(self, username: str, esi_level: int = 5, arrival_time: Optional[float] = None, conn: Any = None):
         self.username = username
         self.esi_level = max(1, min(5, int(esi_level)))
@@ -24,8 +29,7 @@ class QueueEntry:
         # Effective score: lower is higher priority.
         # Aging mechanism: for every 60 seconds waiting, score reduces by 0.25 (anti-starvation)
         wait_secs = max(0.0, now - self.arrival_time)
-        age_bonus = (wait_secs / 60.0) * 0.25
-        return self.esi_level - age_bonus
+        return self.esi_level - (wait_secs * _AGING_FACTOR)
 
 
 class QueueManager:
@@ -56,10 +60,15 @@ class QueueManager:
             self._queues[doctor] = []
 
     def _sort_and_recompute(self, doctor: str) -> None:
+        q = self._queues.get(doctor)
+        if not q:
+            return
         now = time.time()
-        self._queues[doctor].sort(key=lambda e: (e.score(now), e.arrival_time))
-        for idx, entry in enumerate(self._queues[doctor], start=1):
-            self._position_cache[(doctor, entry.username)] = idx
+        aging = _AGING_FACTOR
+        q.sort(key=lambda e: (e.esi_level - max(0.0, now - e.arrival_time) * aging, e.arrival_time))
+        cache = self._position_cache
+        for idx, entry in enumerate(q, start=1):
+            cache[(doctor, entry.username)] = idx
 
     def is_busy(self, doctor: str) -> bool:
         with self._lock:
@@ -122,11 +131,14 @@ class QueueManager:
     def dequeue_patient(self, doctor: str, username: str) -> bool:
         with self._lock:
             self._ensure_doctor(doctor)
-            initial_len = len(self._queues[doctor])
-            self._queues[doctor] = [e for e in self._queues[doctor] if e.username != username]
+            q = self._queues[doctor]
+            initial_len = len(q)
+            self._queues[doctor] = [e for e in q if e.username != username]
             self._position_cache.pop((doctor, username), None)
-            self._sort_and_recompute(doctor)
-            return len(self._queues[doctor]) < initial_len
+            if len(self._queues[doctor]) < initial_len:
+                self._sort_and_recompute(doctor)
+                return True
+            return False
 
     def dequeue_next(self, doctor: str) -> Optional[str]:
         next_item = self.end_session(doctor)
@@ -141,11 +153,14 @@ class QueueManager:
             prev = self._active_patient.pop(doctor, None)
             log(f"[QUEUE] Session ENDED for {doctor} (was: {prev})")
 
-            if self._queues[doctor]:
+            q = self._queues[doctor]
+            if q:
                 self._sort_and_recompute(doctor)
-                entry = self._queues[doctor].pop(0)
+                entry = q.pop(0)
                 self._position_cache.pop((doctor, entry.username), None)
-                self._sort_and_recompute(doctor)
+                cache = self._position_cache
+                for idx, rem in enumerate(q, start=1):
+                    cache[(doctor, rem.username)] = idx
                 self._busy[doctor] = True
                 self._active_patient[doctor] = entry.username
                 desc = ESI_LEVELS.get(entry.esi_level, "Routine")

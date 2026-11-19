@@ -8,21 +8,21 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server")))
 
 try:
-    from server.pdf_generator import generate_transcript_pdf
-    from server.tasks import (
-        generate_session_summary_pdf_task,
-        send_email_reminder_task,
-        send_sms_reminder_task,
-        dispatch_scheduled_reminders_task,
-    )
-except ModuleNotFoundError:
-    from pdf_generator import generate_transcript_pdf
     from tasks import (
         generate_session_summary_pdf_task,
         send_email_reminder_task,
         send_sms_reminder_task,
         dispatch_scheduled_reminders_task,
     )
+    from pdf_generator import generate_transcript_pdf
+except ModuleNotFoundError:
+    from server.tasks import (
+        generate_session_summary_pdf_task,
+        send_email_reminder_task,
+        send_sms_reminder_task,
+        dispatch_scheduled_reminders_task,
+    )
+    from server.pdf_generator import generate_transcript_pdf
 
 
 

@@ -4,12 +4,18 @@ import os
 import ssl
 import socket
 import sys
+import functools
 
 try:
     from cryptography.fernet import Fernet, InvalidToken
     _CRYPTO_AVAILABLE = True
 except ImportError:
     _CRYPTO_AVAILABLE = False
+
+
+@functools.lru_cache(maxsize=1024)
+def _get_cached_fernet(session_key: bytes) -> "Fernet":
+    return Fernet(session_key)
 
 
 def generate_ecdh_keypair():
@@ -48,14 +54,14 @@ def derive_ecdh_shared_key(private_key, peer_public_b64: str) -> bytes:
 def encrypt_message(plaintext: str, session_key: bytes) -> str:
     if not _CRYPTO_AVAILABLE:
         return plaintext
-    return Fernet(session_key).encrypt(plaintext.encode()).decode()
+    return _get_cached_fernet(session_key).encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def decrypt_message(ciphertext: str, session_key: bytes) -> str:
     if not _CRYPTO_AVAILABLE:
         return ciphertext
     try:
-        return Fernet(session_key).decrypt(ciphertext.encode()).decode()
+        return _get_cached_fernet(session_key).decrypt(ciphertext.encode("ascii")).decode("utf-8")
     except InvalidToken:
         return "[DECRYPTION FAILED]"
 

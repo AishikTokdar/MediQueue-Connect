@@ -5,13 +5,14 @@ import asyncio
 from typing import Any, Dict, Optional
 
 HEADER_FORMAT = ">I"
-HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+_HEADER_STRUCT = struct.Struct(HEADER_FORMAT)
+HEADER_SIZE = _HEADER_STRUCT.size
 
 
 def send_framed(sock: socket.socket, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload).encode("utf-8")
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     length = len(data)
-    header = struct.pack(HEADER_FORMAT, length)
+    header = _HEADER_STRUCT.pack(length)
     sock.sendall(header + data)
 
 
@@ -30,7 +31,7 @@ def recv_framed(sock: socket.socket) -> Optional[Dict[str, Any]]:
         except Exception:
             return None
 
-    length = struct.unpack(HEADER_FORMAT, header_data)[0]
+    length = _HEADER_STRUCT.unpack(header_data)[0]
     if length > 10 * 1024 * 1024:  # 10MB safety cap
         raise ValueError("Payload size exceeds maximum safety limit (10MB)")
 
@@ -42,7 +43,16 @@ def recv_framed(sock: socket.socket) -> Optional[Dict[str, Any]]:
 
 
 def _recv_exact(sock: socket.socket, num_bytes: int) -> Optional[bytes]:
-    buf = bytearray()
+    try:
+        chunk = sock.recv(num_bytes)
+        if not chunk:
+            return None
+        if len(chunk) == num_bytes:
+            return chunk
+    except (socket.error, ConnectionResetError):
+        return None
+
+    buf = bytearray(chunk)
     while len(buf) < num_bytes:
         try:
             chunk = sock.recv(num_bytes - len(buf))
@@ -68,9 +78,9 @@ def _recv_until_newline(sock: socket.socket) -> bytes:
 
 
 async def async_send_framed(writer: asyncio.StreamWriter, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload).encode("utf-8")
+    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     length = len(data)
-    header = struct.pack(HEADER_FORMAT, length)
+    header = _HEADER_STRUCT.pack(length)
     writer.write(header + data)
     await writer.drain()
 
@@ -90,7 +100,7 @@ async def async_recv_framed(reader: asyncio.StreamReader) -> Optional[Dict[str, 
         except Exception:
             return None
 
-    length = struct.unpack(HEADER_FORMAT, header_data)[0]
+    length = _HEADER_STRUCT.unpack(header_data)[0]
     if length > 10 * 1024 * 1024:
         raise ValueError("Payload size exceeds maximum safety limit (10MB)")
 

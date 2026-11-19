@@ -20,55 +20,18 @@ except ImportError:
     _REPORTLAB_AVAILABLE = False
 
 
-def generate_transcript_pdf(
-    session_id: str,
-    doctor: str,
-    patient: str,
-    transcript_records: list[dict],
-    output_path: str,
-    prescription: dict | None = None,
-    patient_profile: dict | None = None,
-) -> str:
-    """
-    Generates a beautifully styled, professional medical consultation summary PDF
-    from a list of transcript record dicts.
-    Saves to output_path and returns the absolute filepath.
-    """
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+_CACHED_STYLES = None
 
-    if not _REPORTLAB_AVAILABLE:
-        txt_path = output_path.replace(".pdf", ".txt") if output_path.endswith(".pdf") else output_path
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(f"MEDIQUEUE CONNECT - CONSULTATION SUMMARY\n{'='*55}\n")
-            f.write(f"Session ID: {session_id}\nDoctor: Dr. {doctor}\nPatient: {patient}\n")
-            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*55}\n\n")
-            if prescription:
-                f.write(f"DIAGNOSIS: {prescription.get('diagnosis', 'N/A')}\n")
-                f.write(f"MEDICATIONS: {prescription.get('medications', [])}\n")
-                f.write(f"INSTRUCTIONS: {prescription.get('instructions', 'N/A')}\n\n")
-            f.write("TRANSCRIPT:\n")
-            for rec in transcript_records:
-                sender = rec.get("sender", "")
-                text = rec.get("text", "")
-                ts = rec.get("ts", "")
-                f.write(f"[{ts}] {sender}: {text}\n")
-        return os.path.abspath(txt_path)
-
-    doc = SimpleDocTemplate(
-        output_path,
-        pagesize=letter,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
-    )
+def _get_styles():
+    global _CACHED_STYLES
+    if _CACHED_STYLES is not None:
+        return _CACHED_STYLES
 
     styles = getSampleStyleSheet()
 
     NAVY = colors.HexColor("#1E3A8A")
     TEAL = colors.HexColor("#0D9488")
     SLATE_DARK = colors.HexColor("#1E293B")
-    SLATE_LIGHT = colors.HexColor("#F8FAFC")
     BORDER_COLOR = colors.HexColor("#E2E8F0")
 
     title_style = ParagraphStyle(
@@ -174,6 +137,104 @@ def generate_transcript_pdf(
         alignment=TA_CENTER,
         fontName="Helvetica-Oblique",
     )
+
+    signoff_style = ParagraphStyle(
+        "SignoffText",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11,
+        textColor=SLATE_DARK,
+    )
+
+    _CACHED_STYLES = {
+        "styles": styles,
+        "title": title_style,
+        "subtitle": subtitle_style,
+        "meta_label": meta_label_style,
+        "meta_val": meta_val_style,
+        "section": section_style,
+        "table_header": table_header_style,
+        "cell_patient": cell_patient_style,
+        "cell_doctor": cell_doctor_style,
+        "cell_text": cell_text_style,
+        "cell_ts": cell_ts_style,
+        "footer": footer_style,
+        "signoff": signoff_style,
+        "NAVY": NAVY,
+        "TEAL": TEAL,
+        "SLATE_DARK": SLATE_DARK,
+        "SLATE_LIGHT": colors.HexColor("#F8FAFC"),
+        "BORDER_COLOR": BORDER_COLOR,
+    }
+    return _CACHED_STYLES
+
+
+def generate_transcript_pdf(
+    session_id: str,
+    doctor: str,
+    patient: str,
+    transcript_records: list[dict],
+    output_path: Any,
+    prescription: dict | None = None,
+    patient_profile: dict | None = None,
+) -> str:
+    """
+    Generates a beautifully styled, professional medical consultation summary PDF
+    from a list of transcript record dicts.
+    Saves to output_path and returns the absolute filepath (or 'in-memory').
+    """
+    if isinstance(output_path, (str, os.PathLike)):
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    if not _REPORTLAB_AVAILABLE:
+        if isinstance(output_path, (str, os.PathLike)):
+            txt_path = str(output_path).replace(".pdf", ".txt") if str(output_path).endswith(".pdf") else str(output_path)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(f"MEDIQUEUE CONNECT - CONSULTATION SUMMARY\n{'='*55}\n")
+                f.write(f"Session ID: {session_id}\nDoctor: Dr. {doctor}\nPatient: {patient}\n")
+                f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'='*55}\n\n")
+                if prescription:
+                    f.write(f"DIAGNOSIS: {prescription.get('diagnosis', 'N/A')}\n")
+                    f.write(f"MEDICATIONS: {prescription.get('medications', [])}\n")
+                    f.write(f"INSTRUCTIONS: {prescription.get('instructions', 'N/A')}\n\n")
+                f.write("TRANSCRIPT:\n")
+                for rec in transcript_records:
+                    sender = rec.get("sender", "")
+                    text = rec.get("text", "")
+                    ts = rec.get("ts", "")
+                    f.write(f"[{ts}] {sender}: {text}\n")
+            return os.path.abspath(txt_path)
+        else:
+            output_path.write(b"MEDIQUEUE CONNECT - CONSULTATION SUMMARY\n")
+            return "in-memory"
+
+    doc = SimpleDocTemplate(
+        output_path,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+
+    s_bundle = _get_styles()
+    signoff_style = s_bundle["signoff"]
+    title_style = s_bundle["title"]
+    subtitle_style = s_bundle["subtitle"]
+    meta_label_style = s_bundle["meta_label"]
+    meta_val_style = s_bundle["meta_val"]
+    section_style = s_bundle["section"]
+    table_header_style = s_bundle["table_header"]
+    cell_patient_style = s_bundle["cell_patient"]
+    cell_doctor_style = s_bundle["cell_doctor"]
+    cell_text_style = s_bundle["cell_text"]
+    cell_ts_style = s_bundle["cell_ts"]
+    footer_style = s_bundle["footer"]
+    NAVY = s_bundle["NAVY"]
+    TEAL = s_bundle["TEAL"]
+    SLATE_DARK = s_bundle["SLATE_DARK"]
+    SLATE_LIGHT = s_bundle["SLATE_LIGHT"]
+    BORDER_COLOR = s_bundle["BORDER_COLOR"]
 
     elements = []
 
@@ -376,7 +437,7 @@ def generate_transcript_pdf(
                 f"This document certifies that the above transcript represents an official record of the virtual "
                 f"consultation conducted via MediQueue Connect between Dr. {doctor} and {patient}. "
                 f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}.",
-                ParagraphStyle("SignoffText", parent=styles["Normal"], fontSize=8, leading=11, textColor=SLATE_DARK),
+                signoff_style,
             )
         ]
     ]
@@ -400,4 +461,4 @@ def generate_transcript_pdf(
     )
 
     doc.build(elements)
-    return os.path.abspath(output_path)
+    return os.path.abspath(output_path) if isinstance(output_path, (str, os.PathLike)) else "in-memory"

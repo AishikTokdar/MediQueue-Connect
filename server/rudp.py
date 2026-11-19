@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional, Tuple
 
 
 class RUDPPacket:
+    __slots__ = ("pkt_type", "seq", "ack", "payload", "checksum")
+
     def __init__(
         self,
         pkt_type: str,
@@ -27,12 +29,12 @@ class RUDPPacket:
         self.checksum = checksum or self._compute_checksum()
 
     def _compute_checksum(self) -> str:
-        body = json.dumps(self.payload, sort_keys=True) if self.payload else ""
+        body = json.dumps(self.payload, sort_keys=True, separators=(",", ":")) if self.payload else ""
         raw = f"{self.pkt_type}:{self.seq}:{self.ack}:{body}"
-        return hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
+        return hashlib.md5(raw.encode("ascii", errors="replace")).hexdigest()[:8]
 
     def is_valid(self) -> bool:
-        return self.checksum == self._compute_checksum()
+        return bool(self.checksum and self.checksum == self._compute_checksum())
 
     def to_bytes(self) -> bytes:
         data = {
@@ -43,7 +45,7 @@ class RUDPPacket:
             "payload": self.payload,
             "chk": self.checksum,
         }
-        return json.dumps(data).encode("utf-8")
+        return json.dumps(data, separators=(",", ":")).encode("utf-8")
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> Optional["RUDPPacket"]:

@@ -67,6 +67,8 @@ celery_app.conf.update(
     task_time_limit=300,
     task_always_eager=ALWAYS_EAGER,
     task_eager_propagates=True,
+    broker_connection_retry_on_startup=False,
+    broker_transport_options={"max_retries": 1, "interval_start": 0, "interval_step": 0.1, "interval_max": 0.2},
     beat_schedule={
         "periodic-appointment-reminder-sweep-15m": {
             "task": "server.tasks.dispatch_scheduled_reminders_task",

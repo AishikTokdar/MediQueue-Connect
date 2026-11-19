@@ -121,31 +121,32 @@ class AuthManager:
     def validate(self, token: str) -> bool:
         if not token:
             return False
-        cached_user = cache.get_session(token)
-        if cached_user:
+        if token in self.sessions:
             return True
-        return token in self.sessions
+        cached_user = cache.get_session(token)
+        return bool(cached_user)
 
     def get_role(self, token: str) -> str:
         if not token:
             return ""
+        if token in self.roles:
+            return self.roles[token]
         cached = cache.get_session(token)
         if cached and ":" in cached:
             return cached.split(":", 1)[0]
-        return self.roles.get(token, "patient" if self.validate(token) else "")
-
-    def is_doctor(self, token: str) -> bool:
-        return self.get_role(token) == "doctor"
+        return ""
 
     def get_user(self, token: str) -> str:
         if not token:
             return ""
+        if token in self.sessions:
+            return self.sessions[token]
         cached_user = cache.get_session(token)
         if cached_user:
             if ":" in cached_user:
                 return cached_user.split(":", 1)[1]
             return cached_user
-        return self.sessions.get(token, "")
+        return ""
 
     def get_insurance(self, token: str) -> List[str]:
         user = self.get_user(token)
