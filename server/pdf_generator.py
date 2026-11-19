@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import os
 import json
 import html
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import sqlite3
 import json
 import os
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
 DB_PATH = os.path.join(DATA_DIR, "mediqueue.db")
